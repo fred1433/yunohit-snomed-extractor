@@ -14,6 +14,32 @@ from models import MedicalNote
 from snomed_extractor import SNOMEDExtractor
 from snomed_validator import SNOMEDValidator
 
+def format_modifiers(item) -> str:
+    """Formater les modifieurs contextuels pour affichage"""
+    modifiers = []
+    
+    if hasattr(item, 'negation') and item.negation == "negative":
+        modifiers.append("❌")
+    elif hasattr(item, 'negation') and item.negation == "positive":
+        modifiers.append("✅")
+    
+    if hasattr(item, 'family') and item.family == "family":
+        modifiers.append("👨‍👩‍👧‍👦")
+    elif hasattr(item, 'family') and item.family == "patient":
+        modifiers.append("🧑")
+    
+    if hasattr(item, 'suspicion') and item.suspicion == "suspected":
+        modifiers.append("❓")
+    elif hasattr(item, 'suspicion') and item.suspicion == "confirmed":
+        modifiers.append("✓")
+    
+    if hasattr(item, 'antecedent') and item.antecedent == "history":
+        modifiers.append("📅")
+    elif hasattr(item, 'antecedent') and item.antecedent == "current":
+        modifiers.append("⏰")
+    
+    return " ".join(modifiers) if modifiers else "—"
+
 def main():
     """Fonction principale de validation"""
     console = Console()
@@ -101,11 +127,21 @@ Traitement : Antihistaminique oral et soins locaux. Éviction scolaire recommand
         console.print(table_complet)
         console.print("\n" + "-"*80 + "\n") # Séparateur
 
-        # Tableau filtré (pour le client)
-        table_filtre = Table(title="Tableau CLIENT : Correspondances SNOMED CT valides et termes officiels identifiés")
+        # Tableau filtré (pour le client) - AVEC MODIFIEURS CONTEXTUELS
+        table_filtre = Table(title="Tableau CLIENT : Correspondances SNOMED CT valides avec modifieurs contextuels")
         table_filtre.add_column("Terme Gemini", style="cyan", no_wrap=True)
         table_filtre.add_column("Code Gemini", style="magenta")
         table_filtre.add_column("Terme Officiel SNOMED CT", style="green")
+        table_filtre.add_column("Modifieurs", style="yellow", justify="center")
+        
+        # Créer un dictionnaire pour retrouver les objets originaux
+        all_items = {}
+        for finding in extraction.clinical_findings:
+            all_items[finding.term.lower()] = finding
+        for procedure in extraction.procedures:
+            all_items[procedure.term.lower()] = procedure
+        for structure in extraction.body_structures:
+            all_items[structure.term.lower()] = structure
         
         filtered_rows_count = 0
         for detail in validation_stats["validation_details"]:
@@ -113,16 +149,29 @@ Traitement : Antihistaminique oral et soins locaux. Éviction scolaire recommand
             
             if detail["status"] == "VALID" and official_term_pour_filtre and official_term_pour_filtre != "(terme non trouvé)":
                 filtered_rows_count += 1
+                
+                # Récupérer l'objet original pour les modifieurs
+                original_item = all_items.get(detail["term"].lower())
+                modifiers_text = format_modifiers(original_item) if original_item else "—"
+                
                 table_filtre.add_row(
                     detail["term"][:30] + "..." if len(detail["term"]) > 30 else detail["term"],
                     detail["gemini_code"],
-                    official_term_pour_filtre[:40] + "..." if len(official_term_pour_filtre) > 40 else official_term_pour_filtre
+                    official_term_pour_filtre[:40] + "..." if len(official_term_pour_filtre) > 40 else official_term_pour_filtre,
+                    modifiers_text
                 )
         
         console.print(table_filtre)
         
         if filtered_rows_count == 0 and total > 0:
             console.print("\nℹ️ [yellow]CLIENT : Aucun code Gemini n'a correspondu à un code SNOMED CT valide avec un terme officiel identifiable.[/yellow]")
+
+        # Légende des modifieurs
+        legend_text = """
+🔗 LÉGENDE DES MODIFIEURS :
+   ✅ Positif / ❌ Négatif  |  🧑 Patient / 👨‍👩‍👧‍👦 Familial  |  ✓ Confirmé / ❓ Suspecté  |  ⏰ Actuel / 📅 Antécédent
+"""
+        console.print(Panel(legend_text, title="Légende", border_style="cyan"))
 
         # Conclusion
         if total > 0:
