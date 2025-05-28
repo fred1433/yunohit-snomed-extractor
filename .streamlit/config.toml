@@ -1,15 +1,15 @@
-[browser]
-gatherUsageStats = false
+[theme]
+base = "light"
+primaryColor = "#667eea"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f8f9ff"
+textColor = "#262730"
 
 [server]
 headless = true
+port = 8501
 enableCORS = false
 enableXsrfProtection = false
-port = 8501
 
-[theme]
-primaryColor = "#2a5298"
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f0f2f6"
-textColor = "#262730"
-font = "sans serif" 
+[browser]
+gatherUsageStats = false 
