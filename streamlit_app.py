@@ -260,7 +260,7 @@ def run_extraction(mode: str, note_content: str) -> dict:
     try:
         if mode == "Standard":
             result = subprocess.run(
-                ['python', 'validate_extraction.py'], 
+                ['python', 'validate_extraction_streamlit.py'], 
                 capture_output=True, 
                 text=True, 
                 timeout=180,
@@ -290,10 +290,17 @@ def run_extraction(mode: str, note_content: str) -> dict:
                 'output': result.stdout,
                 'error': f"""❌ ERREUR D'EXÉCUTION
 
+📋 STDOUT:
+{result.stdout}
+
+🔴 STDERR:
 {result.stderr}
 
-💡 Si c'est une erreur de dépendance, l'app va se redéployer automatiquement.
-🔧 Si c'est une erreur de configuration, vérifiez les secrets."""
+🔧 CODE DE RETOUR: {result.returncode}
+
+💡 DIAGNOSTIC:
+- Si erreur 'rich': Redéploiement en cours...
+- Si erreur de configuration: Vérifiez les secrets."""
             }
     except Exception as e:
         return {
