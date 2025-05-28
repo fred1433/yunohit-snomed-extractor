@@ -64,14 +64,14 @@ Traitement : Antihistaminique oral et soins locaux. Éviction scolaire recommand
                         if st.button("🚀 Extraire les Entités SNOMED", type="primary"):
                             try:
                                 # Import direct ici pour éviter les problèmes de subprocess
-                                from snomed_extractor import SnomedExtractor
-                                from snomed_validator import SnomedValidator
+                                from snomed_extractor import SNOMEDExtractor
+                                from snomed_validator import SNOMEDValidator
                                 
                                 with st.spinner("🔄 Extraction en cours..."):
                                     start_time = time.time()
                                     
                                     # Extraction
-                                    extractor = SnomedExtractor(api_key)
+                                    extractor = SNOMEDExtractor(api_key)
                                     result = extractor.extract_medical_entities(note_content)
                                     extraction_time = time.time() - start_time
                                     
@@ -79,7 +79,7 @@ Traitement : Antihistaminique oral et soins locaux. Éviction scolaire recommand
                                         st.success(f"✅ Extraction réussie en {extraction_time:.1f}s")
                                         
                                         # Validation
-                                        validator = SnomedValidator()
+                                        validator = SNOMEDValidator()
                                         validation_results = []
                                         
                                         for entite in result['entites']:
