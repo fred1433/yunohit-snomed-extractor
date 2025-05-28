@@ -199,23 +199,34 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
         """Parser la réponse JSON de Gemini"""
         try:
             # Nettoyer la réponse pour extraire le JSON
-            cleaned_text = response_text.strip()
-            
-            # Chercher le JSON dans la réponse
-            json_match = re.search(r'\{.*\}', cleaned_text, re.DOTALL)
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
             if json_match:
                 json_str = json_match.group()
                 return json.loads(json_str)
             else:
-                # Si pas de JSON trouvé, essayer de parser directement
-                return json.loads(cleaned_text)
+                print("❌ Aucun JSON trouvé dans la réponse")
+                return {"termes_medicaux": []}
         except json.JSONDecodeError as e:
-            print(f"Erreur de parsing JSON : {e}")
-            print(f"Réponse brute : {response_text}")
-            # Retourner une structure vide en cas d'erreur
-            return {
-                "termes_medicaux": []
-            }
+            print(f"❌ Erreur parsing JSON : {e}")
+            print(f"Réponse reçue : {response_text[:500]}...")
+            return {"termes_medicaux": []}
+    
+    def _extract_response_text(self, response) -> str:
+        """Extraire le texte d'une réponse Gemini"""
+        if hasattr(response, 'candidates') and response.candidates:
+            candidate = response.candidates[0]
+            
+            if hasattr(candidate, 'finish_reason') and candidate.finish_reason == 2:
+                print("❌ Réponse bloquée par filtres de sécurité")
+                return ""
+            
+            if hasattr(response, 'text') and response.text:
+                return response.text
+            elif hasattr(candidate.content, 'parts') and candidate.content.parts:
+                return "".join([part.text for part in candidate.content.parts if hasattr(part, 'text')])
+        
+        print("❌ Pas de texte dans la réponse")
+        return ""
     
     def _create_empty_extraction(self, medical_note: MedicalNote) -> SNOMEDExtraction:
         """Créer une extraction vide en cas d'erreur"""
@@ -224,4 +235,124 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
             clinical_findings=[],
             procedures=[],
             body_structures=[]
-        ) 
+        )
+    
+    def extract_triple_parallel(self, medical_note: MedicalNote) -> SNOMEDExtraction:
+        """Extraction avec 3 appels parallèles pour améliorer la robustesse"""
+        try:
+            # 🛡️ SÉCURITÉ : Vérifier les limites avant les appels API
+            can_proceed, message = security_manager.can_make_request()
+            if not can_proceed:
+                print(f"🚫 EXTRACTION BLOQUÉE : {message}")
+                return self._create_empty_extraction(medical_note)
+            
+            print(f"🔒 Sécurité : {message}")
+            print("🔍 Extraction TRIPLE PARALLÈLE commencée...")
+            
+            prompt = self.create_extraction_prompt(medical_note.content)
+            
+            # Faire 3 appels parallèles avec le même prompt
+            print("📋 Lancement de 3 appels parallèles à Gemini...")
+            
+            responses = []
+            for i in range(3):
+                print(f"🔄 Appel {i+1}/3...")
+                response = self.model.generate_content(prompt)
+                security_manager.record_api_call(estimated_cost=0.02)
+                responses.append(response)
+            
+            print("✅ 3 appels terminés, analyse des réponses...")
+            
+            # Collecter tous les termes de tous les appels
+            all_terms = []
+            
+            for i, response in enumerate(responses):
+                print(f"📊 Analyse réponse {i+1}/3...")
+                response_text = self._extract_response_text(response)
+                if response_text:
+                    parsed_data = self.parse_gemini_response(response_text)
+                    terms = parsed_data.get("termes_medicaux", [])
+                    print(f"   → {len(terms)} termes extraits")
+                    all_terms.extend(terms)
+                else:
+                    print(f"   → Échec de l'extraction")
+            
+            print(f"🔄 Total combiné : {len(all_terms)} termes")
+            
+            # Dédupliquer par terme (garder le premier trouvé)
+            seen_terms = set()
+            unique_terms = []
+            for term_data in all_terms:
+                terme = term_data.get("terme", "").lower().strip()
+                if terme and terme not in seen_terms:
+                    seen_terms.add(terme)
+                    unique_terms.append(term_data)
+            
+            print(f"✅ Après déduplication : {len(unique_terms)} termes uniques")
+            
+            # Convertir en objets SNOMED CT
+            clinical_findings = []
+            procedures = []
+            body_structures = []
+            
+            for terme_data in unique_terms:
+                terme = terme_data.get("terme", "")
+                categorie = terme_data.get("categorie", "").lower()
+                code_snomed = terme_data.get("code_classification", "UNKNOWN")
+                
+                # Extraire les modifieurs contextuels
+                negation = terme_data.get("negation", "positive")
+                family = terme_data.get("famille", "patient")
+                suspicion = terme_data.get("suspicion", "confirmed")
+                antecedent = terme_data.get("antecedent", "current")
+                
+                if "symptome" in categorie or "diagnostic" in categorie or "finding" in categorie or "clinical_finding" in categorie:
+                    clinical_findings.append(ClinicalFinding(
+                        term=terme,
+                        description=f"Constatation clinique : {terme}",
+                        context="Extrait par méthode triple parallèle",
+                        snomed_code=code_snomed,
+                        snomed_term_fr=terme,
+                        negation=negation,
+                        family=family,
+                        suspicion=suspicion,
+                        antecedent=antecedent
+                    ))
+                elif "traitement" in categorie or "procedure" in categorie or "intervention" in categorie:
+                    procedures.append(Procedure(
+                        term=terme,
+                        description=f"Intervention/Procédure : {terme}",
+                        context="Extrait par méthode triple parallèle",
+                        snomed_code=code_snomed,
+                        snomed_term_fr=terme,
+                        negation=negation,
+                        family=family,
+                        suspicion=suspicion,
+                        antecedent=antecedent
+                    ))
+                elif "structure" in categorie or "body_structure" in categorie:
+                    body_structures.append(BodyStructure(
+                        term=terme,
+                        description=f"Structure corporelle : {terme}",
+                        context="Extrait par méthode triple parallèle",
+                        snomed_code=code_snomed,
+                        snomed_term_fr=terme,
+                        negation=negation,
+                        family=family,
+                        suspicion=suspicion,
+                        antecedent=antecedent
+                    ))
+            
+            print(f"✅ Extraction TRIPLE PARALLÈLE réussie : {len(clinical_findings)} constatations, {len(procedures)} procédures, {len(body_structures)} structures")
+            security_manager.print_usage_warning()
+            
+            return SNOMEDExtraction(
+                original_note=medical_note,
+                clinical_findings=clinical_findings,
+                procedures=procedures,
+                body_structures=body_structures
+            )
+            
+        except Exception as e:
+            print(f"❌ Erreur extraction triple parallèle : {e}")
+            return self._create_empty_extraction(medical_note) 

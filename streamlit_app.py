@@ -25,10 +25,381 @@ except ImportError as e:
     IMPORTS_OK = False
     IMPORT_ERROR = str(e)
 
+def translate_modifier_values(value):
+    """Traduit les valeurs des modifieurs contextuels de l'anglais vers le français"""
+    translations = {
+        # Négation
+        'positive': 'positif',
+        'negative': 'négatif',
+        'absent': 'absent',
+        'present': 'présent',
+        
+        # Famille
+        'patient': 'patient',
+        'family': 'famille',
+        
+        # Suspicion
+        'confirmed': 'confirmé',
+        'suspected': 'suspecté',
+        'suspicion': 'suspicion',
+        
+        # Antécédent
+        'current': 'actuel',
+        'antecedent': 'antécédent',
+        'past': 'passé',
+        'history': 'historique'
+    }
+    
+    return translations.get(value.lower(), value) if isinstance(value, str) else value
+
 def main():
+    # CSS personnalisé pour un design plus moderne
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 2rem; border-radius: 15px; color: white; text-align: center; margin-bottom: 2rem;">
-        <h1>PoC Extracteur SNOMED CT Yunohit</h1>
+    <style>
+    /* Amélioration globale de la police */
+    .main {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    /* SUPPRIMER LES LIENS D'ANCRAGE AUTOMATIQUES */
+    .element-container h1 a, 
+    .element-container h2 a, 
+    .element-container h3 a, 
+    .element-container h4 a, 
+    .element-container h5 a, 
+    .element-container h6 a {
+        display: none !important;
+    }
+    
+    /* AUGMENTER TOUTES LES TAILLES DE POLICES - MINIMUM 28PX ! */
+    
+    /* Taille de base globale beaucoup plus grande */
+    html { font-size: 28px !important; }
+    
+    /* Texte général de l'application */
+    .main, .stApp, body {
+        font-size: 28px !important;
+    }
+    
+    /* Labels et textes des formulaires */
+    .stSelectbox label, 
+    .stTextArea label, 
+    .stCheckbox label,
+    .stRadio label,
+    .stSlider label {
+        font-size: 32px !important;
+        font-weight: 500 !important;
+    }
+    
+    /* Contenu des selectbox */
+    .stSelectbox > div > div > div {
+        font-size: 28px !important;
+    }
+    
+    /* Zone de texte */
+    .stTextArea > div > div > textarea {
+        border-radius: 12px;
+        border: 2px solid #e1e5fe;
+        transition: border-color 0.3s ease;
+        font-size: 28px !important;
+        line-height: 1.5 !important;
+        padding: 20px !important;
+        min-height: 200px !important;
+    }
+    
+    .stTextArea > div > div > textarea:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    /* Texte des checkboxes */
+    .stCheckbox > label > div:last-child {
+        font-size: 28px !important;
+    }
+    
+    /* Métriques - valeurs et labels */
+    div[data-testid="metric-container"] > div {
+        font-size: 30px !important;
+    }
+    
+    div[data-testid="metric-container"] > div > div:first-child {
+        font-size: 28px !important; /* Label de la métrique */
+    }
+    
+    div[data-testid="metric-container"] > div > div:last-child {
+        font-size: 48px !important; /* Valeur de la métrique */
+        font-weight: 600 !important;
+    }
+    
+    /* Tableaux */
+    .stDataFrame table {
+        font-size: 28px !important;
+    }
+    
+    .stDataFrame th {
+        font-size: 30px !important;
+        font-weight: 600 !important;
+    }
+    
+    .stDataFrame td {
+        font-size: 28px !important;
+        padding: 16px 12px !important;
+    }
+    
+    /* Boutons */
+    .stButton > button {
+        font-size: 32px !important;
+        font-weight: 600 !important;
+        padding: 1rem 2.5rem !important;
+    }
+    
+    /* Messages d'alerte et de succès */
+    .stAlert {
+        font-size: 28px !important;
+    }
+    
+    /* Texte dans les expanders */
+    .streamlit-expanderContent {
+        font-size: 28px !important;
+    }
+    
+    /* Titres - beaucoup plus grands */
+    h1 { font-size: 4rem !important; }
+    h2 { font-size: 3.5rem !important; }
+    h3 { font-size: 3rem !important; }
+    h4 { font-size: 2.5rem !important; }
+    h5 { font-size: 2rem !important; }
+    h6 { font-size: 1.8rem !important; }
+    
+    /* Paragraphes et texte libre */
+    p, div, span {
+        font-size: 28px !important;
+        line-height: 1.6 !important;
+    }
+    
+    /* Help tooltips */
+    .stTooltipIcon {
+        font-size: 28px !important;
+    }
+    
+    /* Sidebar si utilisé */
+    .css-1d391kg {
+        font-size: 28px !important;
+    }
+    
+    /* RÈGLES CIBLÉES POUR AUGMENTER LES PETITES POLICES */
+    
+    /* Forcer les labels de formulaires spécifiquement */
+    label[data-testid] { font-size: 16px !important; }
+    
+    /* Forcer le contenu des selectbox seulement */
+    .stSelectbox div[data-baseweb="select"] span { font-size: 15px !important; }
+    
+    /* Forcer seulement le texte dans les checkboxes */
+    .stCheckbox label span { font-size: 15px !important; }
+    
+    /* Augmenter la taille de base de l'application */
+    html { font-size: 16px !important; }
+    
+    /* Header principal plus moderne */
+    .main-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 2rem;
+        border-radius: 20px;
+        color: white;
+        text-align: center;
+        margin-bottom: 2rem;
+        box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
+    }
+    
+    /* Amélioration des métriques */
+    div[data-testid="metric-container"] {
+        background: linear-gradient(145deg, #f8f9ff 0%, #e8ecff 100%);
+        border: 1px solid #e1e5fe;
+        padding: 1rem;
+        border-radius: 15px;
+        box-shadow: 0 4px 16px rgba(103, 126, 234, 0.1);
+        transition: transform 0.2s ease;
+    }
+    
+    div[data-testid="metric-container"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(103, 126, 234, 0.15);
+    }
+    
+    /* Styling des selectbox et inputs */
+    .stSelectbox > div > div {
+        border-radius: 12px;
+        border: 2px solid #e1e5fe;
+        transition: border-color 0.3s ease;
+        min-height: 80px !important;
+        padding: 20px 16px !important;
+    }
+    
+    .stSelectbox > div > div:focus-within {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    /* Ajuster la hauteur de tous les éléments selectbox */
+    .stSelectbox div[data-baseweb="select"] {
+        min-height: 80px !important;
+        padding: 20px 16px !important;
+    }
+    
+    /* Ajuster la hauteur de la dropdown elle-même */
+    .stSelectbox div[data-baseweb="select"] > div {
+        min-height: 60px !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+    
+    /* Corriger l'alignement du selectbox */
+    .stSelectbox {
+        margin-left: 0 !important;
+        padding-left: 0 !important;
+    }
+    
+    .stSelectbox > div {
+        margin-left: 0 !important;
+        padding-left: 0 !important;
+    }
+    
+    /* Règles plus agressives pour l'alignement du selectbox */
+    .stSelectbox > div > div > div {
+        margin-left: 0 !important;
+        padding-left: 0 !important;
+    }
+    
+    /* Cibler spécifiquement les éléments BaseWeb */
+    .stSelectbox div[data-baseweb="select"] {
+        margin-left: 0 !important;
+        padding-left: 0 !important;
+    }
+    
+    /* Forcer l'alignement sur tous les containers Streamlit */
+    div[data-testid="stSelectbox"] {
+        margin-left: 0 !important;
+        padding-left: 0 !important;
+    }
+    
+    div[data-testid="stSelectbox"] > div {
+        margin-left: 0 !important;
+        padding-left: 0 !important;
+    }
+    
+    /* Reset complet des marges pour le selectbox */
+    .stSelectbox * {
+        margin-left: 0 !important;
+    }
+    
+    /* Bouton principal plus attractif */
+    .stButton > button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 15px;
+        padding: 0.75rem 2rem;
+        font-weight: 600;
+        font-size: 1.1rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+    }
+    
+    /* Amélioration des checkboxes */
+    .stCheckbox > label {
+        background: rgba(102, 126, 234, 0.05);
+        padding: 0.5rem 1rem;
+        border-radius: 10px;
+        border: 1px solid rgba(102, 126, 234, 0.2);
+        transition: all 0.3s ease;
+    }
+    
+    .stCheckbox > label:hover {
+        background: rgba(102, 126, 234, 0.1);
+        border-color: rgba(102, 126, 234, 0.3);
+    }
+    
+    /* Tableau de résultats plus moderne */
+    .stDataFrame {
+        background: white;
+        border-radius: 15px;
+        border: 1px solid #e1e5fe;
+        box-shadow: 0 4px 20px rgba(102, 126, 234, 0.1);
+        overflow: hidden;
+    }
+    
+    /* FORCER ABSOLUMENT LA TAILLE DES TABLEAUX */
+    .stDataFrame table * {
+        font-size: 28px !important;
+    }
+    
+    .stDataFrame th * {
+        font-size: 30px !important;
+    }
+    
+    .stDataFrame td * {
+        font-size: 28px !important;
+    }
+    
+    /* Sélecteurs ultra-spécifiques pour les tableaux */
+    div[data-testid="stDataFrame"] table {
+        font-size: 28px !important;
+    }
+    
+    div[data-testid="stDataFrame"] th {
+        font-size: 30px !important;
+    }
+    
+    div[data-testid="stDataFrame"] td {
+        font-size: 28px !important;
+    }
+    
+    /* Forcer avec des sélecteurs encore plus précis */
+    div[data-testid="stDataFrame"] * {
+        font-size: 28px !important;
+    }
+    
+    /* Amélioration des alertes de succès */
+    .stAlert > div {
+        border-radius: 12px;
+        border: none;
+        box-shadow: 0 4px 16px rgba(76, 175, 80, 0.2);
+    }
+    
+    /* Sections avec cartes */
+    .result-card {
+        background: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+        border: 1px solid #e1e5fe;
+        box-shadow: 0 4px 20px rgba(102, 126, 234, 0.08);
+    }
+    
+    /* Dividers plus élégants */
+    hr {
+        border: none;
+        height: 2px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 1px;
+        margin: 2rem 0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Header principal redesigné
+    st.markdown("""
+    <div class="main-header">
+        <h1>🏥 PoC Extracteur SNOMED CT Yunohit</h1>
+        <p style="opacity: 0.9; font-size: 1.1rem; margin: 0.5rem 0 0 0;">
+            Intelligence artificielle pour l'extraction d'entités médicales
+        </p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -74,7 +445,7 @@ Plan : Hospitalisation pour bilan cardiologique complet, incluant une coronarogr
             
             # Sélecteur de note
             choix_note = st.selectbox(
-                "Sélectionnez ou saisissez une Note Médicale :",
+                "📋 Sélectionnez ou saisissez une Note Médicale :",
                 options=list(exemples_notes.keys()),
                 index=0
             )
@@ -82,14 +453,14 @@ Plan : Hospitalisation pour bilan cardiologique complet, incluant une coronarogr
             # Zone de texte qui se met à jour selon la sélection
             if choix_note == "Saisie personnalisée":
                 note_content = st.text_area(
-                    "Votre note médicale :",
+                    "✍️ Votre note médicale :",
                     value="",
                     height=150,
                     placeholder="Saisissez ici votre note médicale..."
                 )
             else:
                 note_content = st.text_area(
-                    "Note médicale sélectionnée :",
+                    "📄 Note médicale sélectionnée :",
                     value=exemples_notes[choix_note],
                     height=150
                 )
@@ -138,7 +509,15 @@ Plan : Hospitalisation pour bilan cardiologique complet, incluant une coronarogr
                             content=note_content,
                             specialty="Médecine générale"
                         )
-                        result = extractor.extract_snomed_info(medical_note)
+                        
+                        # Choix de la méthode selon le mode
+                        if use_flash_model:
+                            # Mode développement : méthode rapide 1-étape avec Flash
+                            result = extractor.extract_snomed_info(medical_note)
+                        else:
+                            # Mode production : méthode 3 appels parallèles avec Gemini 2.5 Pro
+                            result = extractor.extract_triple_parallel(medical_note)
+                            
                         extraction_time = time.time() - start_time
                         
                         # Vérification du type de result pour diagnostic
@@ -153,47 +532,80 @@ Plan : Hospitalisation pour bilan cardiologique complet, incluant une coronarogr
                             return
                         
                         if result and (result.clinical_findings or result.procedures or result.body_structures):
-                            model_info = "Gemini 2.5 Flash" if use_flash_model else "Gemini 2.5 Pro"
-                            st.success(f"✅ Extraction réussie en {extraction_time:.1f}s ({model_info})")
-                            
                             # Validation complète avec SNOMEDValidator
                             validator = SNOMEDValidator()
                             validation_stats = validator.validate_extraction_result(result)
                             
-                            # Affichage des résultats
-                            st.markdown("### 📊 Résultats de l'extraction")
-                            
-                            # Métriques globales
-                            total_extracted = len(validation_stats.get("validation_details", []))
-                            valid_count = validation_stats.get("valid_codes", 0)
-                            success_rate = (valid_count / total_extracted * 100) if total_extracted > 0 else 0
-                            
-                            col1, col2, col3, col4 = st.columns(4)
-                            with col1:
-                                st.metric("Entités extraites", total_extracted)
-                            with col2:
-                                st.metric("Codes valides", valid_count)
-                            with col3:
-                                st.metric("Taux de réussite", f"{success_rate:.1f}%")
-                            with col4:
-                                st.metric("Temps d'extraction", f"{extraction_time:.1f}s")
-                            
-                            # Tableau des résultats valides uniquement
-                            valid_results = [
-                                detail for detail in validation_stats.get("validation_details", [])
-                                if detail["status"] == "VALID" and detail["official_term"] is not None
-                            ]
-                            
-                            if valid_results:
-                                st.markdown("### ✅ Termes SNOMED CT validés")
+                            # Métriques globales - Seulement en mode développement
+                            if not preview_production:
+                                total_extracted = len(validation_stats.get("validation_details", []))
+                                valid_count = validation_stats.get("valid_codes", 0)
+                                success_rate = (valid_count / total_extracted * 100) if total_extracted > 0 else 0
                                 
-                                # Créer le tableau
+                                st.markdown("#### 📈 Métriques de performance")
+                                col1, col2, col3, col4 = st.columns(4)
+                                with col1:
+                                    st.metric(
+                                        "📋 Entités extraites", 
+                                        total_extracted,
+                                        help="Nombre total d'entités détectées par l'IA"
+                                    )
+                                with col2:
+                                    st.metric(
+                                        "✅ Codes valides", 
+                                        valid_count,
+                                        help="Codes trouvés dans la base SNOMED CT française"
+                                    )
+                                with col3:
+                                    st.metric(
+                                        "🎯 Taux de réussite", 
+                                        f"{success_rate:.1f}%",
+                                        help="Pourcentage de codes validés"
+                                    )
+                                with col4:
+                                    st.metric(
+                                        "⏱️ Temps d'extraction", 
+                                        f"{extraction_time:.1f}s",
+                                        help="Durée totale du traitement"
+                                    )
+                            
+                            # Tableau des résultats valides uniquement avec modifieurs contextuels
+                            valid_results_with_modifiers = []
+                            
+                            # Récupérer les modifieurs depuis les objets originaux
+                            all_items = result.clinical_findings + result.procedures + result.body_structures
+                            
+                            for item in all_items:
+                                # Vérifier si le code est valide
+                                is_valid = validator.validate_code(item.snomed_code)
+                                if is_valid:
+                                    official_term = validator.get_french_term(item.snomed_code)
+                                    if official_term:
+                                        valid_results_with_modifiers.append({
+                                            "term": item.term,
+                                            "gemini_code": item.snomed_code,
+                                            "official_term": official_term,
+                                            "negation": translate_modifier_values(getattr(item, 'negation', 'positive')),
+                                            "family": translate_modifier_values(getattr(item, 'family', 'patient')),
+                                            "suspicion": translate_modifier_values(getattr(item, 'suspicion', 'confirmed')),
+                                            "antecedent": translate_modifier_values(getattr(item, 'antecedent', 'current'))
+                                        })
+                            
+                            if valid_results_with_modifiers:
+                                # Titre simple comme demandé
+                                st.markdown(f"## 🎯 {len(valid_results_with_modifiers)} terme(s) extraits et validés dans la base SNOMED CT française")
+                                
+                                # Créer le tableau avec les modifieurs contextuels en français
                                 df_data = []
-                                for result in valid_results:
+                                for result in valid_results_with_modifiers:
                                     df_data.append({
-                                        "Terme extrait (Gemini)": result["term"],
+                                        "Terme extrait": result["term"],
                                         "Code SNOMED": result["gemini_code"], 
-                                        "Terme officiel (Base FR)": result["official_term"]
+                                        "Terme officiel": result["official_term"],
+                                        "Négation": result["negation"],
+                                        "Famille": result["family"], 
+                                        "Suspicion": result["suspicion"],
+                                        "Antécédent": result["antecedent"]
                                     })
                                 
                                 df = pd.DataFrame(df_data)
@@ -204,29 +616,9 @@ Plan : Hospitalisation pour bilan cardiologique complet, incluant une coronarogr
                                     use_container_width=True,
                                     hide_index=True
                                 )
-                                
-                                st.success(f"🎯 {len(valid_results)} terme(s) validé(s) dans la base SNOMED CT française")
                             
                             else:
                                 st.warning("⚠️ Aucun terme n'a pu être validé dans la base SNOMED CT française")
-                            
-                            # Section détaillée optionnelle (avec tous les résultats) - Seulement en mode développement
-                            if not preview_production:
-                                with st.expander("📋 Voir tous les résultats détaillés"):
-                                    for detail in validation_stats.get("validation_details", []):
-                                        status_icon = "✅" if detail["status"] == "VALID" else "❌"
-                                        with st.container():
-                                            col1, col2 = st.columns(2)
-                                            with col1:
-                                                st.write(f"{status_icon} **Terme:** {detail['term']}")
-                                                st.write(f"**Code:** {detail['gemini_code']}")
-                                            with col2:
-                                                if detail["status"] == "VALID" and detail["official_term"]:
-                                                    st.write(f"**Statut:** ✅ Validé")
-                                                    st.write(f"**Terme officiel:** {detail['official_term']}")
-                                                else:
-                                                    st.write(f"**Statut:** ❌ Code non trouvé dans la base française")
-                                            st.markdown("---")
                         
                         else:
                             st.warning("⚠️ Aucune entité extraite")
