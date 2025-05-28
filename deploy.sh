@@ -87,32 +87,4 @@ else
 fi
 
 echo ""
-echo "🌐 OUVERTURE DU DÉPLOIEMENT STREAMLIT CLOUD"
-echo "============================================"
-echo ""
-echo "🔗 URL de déploiement :"
-echo "${DEPLOY_URL}"
-echo ""
-
-# Ouvrir le navigateur
-if command -v open &> /dev/null; then
-    echo "🚀 Ouverture automatique du navigateur..."
-    open "${DEPLOY_URL}"
-elif command -v xdg-open &> /dev/null; then
-    echo "🚀 Ouverture automatique du navigateur..."
-    xdg-open "${DEPLOY_URL}"
-else
-    echo "📋 Copiez-collez l'URL ci-dessus dans votre navigateur"
-fi
-
-echo ""
-echo "📝 ÉTAPES SUIVANTES :"
-echo "1. ✅ Connectez-vous avec GitHub (si pas déjà fait)"
-echo "2. ✅ Cliquez sur 'Deploy' dans l'interface"
-echo "3. ⚙️ Une fois déployé, allez dans Settings > Secrets"
-echo "4. 🔐 Ajoutez : GEMINI_API_KEY = \"votre_clé_ici\""
-echo "5. 💾 Save - L'app redémarre automatiquement"
-echo ""
-echo "🎯 URL finale sera : https://fred1433-yunohit-snomed-extractor-streamlit-app-xxx.streamlit.app/"
-echo ""
-echo "✨ DÉPLOIEMENT LANCÉ ! 🚀" 
+echo -e "${GREEN}✨ DÉPLOIEMENT TERMINÉ ! 🚀${NC}" 
