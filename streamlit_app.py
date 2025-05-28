@@ -10,43 +10,142 @@ import pandas as pd
 
 # Configuration de la page
 st.set_page_config(
-    page_title="Extracteur SNOMED CT - Yunohit",
+    page_title="🏥 Extracteur SNOMED CT - Yunohit",
     page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# CSS personnalisé pour un look professionnel
+# CSS personnalisé pour un look professionnel moderne
 st.markdown("""
 <style>
+    /* Thème principal */
     .main-header {
-        background: linear-gradient(90deg, #1e3c72 0%, #2a5298 100%);
-        padding: 1rem;
-        border-radius: 10px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 2rem;
+        border-radius: 15px;
         color: white;
         text-align: center;
         margin-bottom: 2rem;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
     }
-    .metric-card {
-        background: #f8f9fa;
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 4px solid #2a5298;
+    
+    .main-header h1 {
+        margin: 0;
+        font-size: 2.5rem;
+        font-weight: 700;
+    }
+    
+    .main-header h3 {
         margin: 0.5rem 0;
+        font-weight: 300;
+        opacity: 0.9;
     }
+    
+    /* Cards métriques améliorées */
+    .metric-card {
+        background: linear-gradient(145deg, #f8f9ff 0%, #e8ecf7 100%);
+        padding: 1.5rem;
+        border-radius: 12px;
+        border: 1px solid #e1e8ed;
+        margin: 0.5rem 0;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        transition: transform 0.2s;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    
+    /* Boxes de statut */
     .success-box {
-        background: #d4edda;
+        background: linear-gradient(145deg, #d4edda 0%, #c3e6cb 100%);
         border: 1px solid #c3e6cb;
-        border-radius: 8px;
-        padding: 1rem;
+        border-radius: 12px;
+        padding: 1.5rem;
         margin: 1rem 0;
+        border-left: 5px solid #28a745;
     }
+    
     .warning-box {
-        background: #fff3cd;
+        background: linear-gradient(145deg, #fff3cd 0%, #ffeaa7 100%);
         border: 1px solid #ffeaa7;
-        border-radius: 8px;
-        padding: 1rem;
+        border-radius: 12px;
+        padding: 1.5rem;
         margin: 1rem 0;
+        border-left: 5px solid #ffc107;
+    }
+    
+    .info-box {
+        background: linear-gradient(145deg, #d1ecf1 0%, #bee5eb 100%);
+        border: 1px solid #bee5eb;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+        border-left: 5px solid #17a2b8;
+    }
+    
+    /* Boutons personnalisés */
+    .stButton > button {
+        background: linear-gradient(145deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        padding: 0.75rem 2rem;
+        font-weight: 600;
+        font-size: 1.1rem;
+        transition: all 0.3s;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+    
+    /* Sidebar améliorée */
+    .css-1d391kg {
+        background: linear-gradient(180deg, #f8f9ff 0%, #e8ecf7 100%);
+    }
+    
+    /* Métriques temps réel */
+    .real-time-metrics {
+        background: linear-gradient(145deg, #ffffff 0%, #f8f9ff 100%);
+        padding: 1.5rem;
+        border-radius: 15px;
+        border: 1px solid #e1e8ed;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+    }
+    
+    /* Footer */
+    .footer-style {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 2rem;
+        border-radius: 15px;
+        color: white;
+        margin-top: 3rem;
+    }
+    
+    /* Animations */
+    @keyframes pulse {
+        0% { opacity: 0.8; }
+        50% { opacity: 1; }
+        100% { opacity: 0.8; }
+    }
+    
+    .loading-pulse {
+        animation: pulse 2s infinite;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+        .main-header h1 {
+            font-size: 2rem;
+        }
+        .main-header {
+            padding: 1.5rem;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
