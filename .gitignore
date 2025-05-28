@@ -1,0 +1,28 @@
+# Fichiers Python compilés
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Répertoires d'environnement virtuel
+.env
+.venv
+venv/
+ENV/
+env/
+
+# Fichiers spécifiques aux IDE
+.vscode/
+.idea/
+
+# Fichiers spécifiques au système d'exploitation
+.DS_Store
+
+# Fichiers de log
+*.log
+
+# Bases de données locales (si utilisées)
+*.sqlite3
+*.db
+
+# Dépendances téléchargées localement (ex: dossier SNOMED CT si copié dans le projet - À NE PAS FAIRE)
+# terminologie-snomed-ct-fr-Juin 2024 v1.0 (1)/ 

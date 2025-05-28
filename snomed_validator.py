@@ -12,21 +12,19 @@ from pathlib import Path
 class SNOMEDValidator:
     """Validateur de codes SNOMED CT basé sur la distribution officielle française"""
     
-    def __init__(self, snomed_base_path: Optional[str] = None):
+    def __init__(self, snomed_data_path: Optional[str] = None):
         """
         Initialiser le validateur
         
         Args:
-            snomed_base_path: Chemin vers le dossier SNOMED CT. 
-                             Si None, utilise le chemin par défaut dans Downloads
+            snomed_data_path: Chemin vers le dossier contenant les fichiers SNOMED CT Snapshot.
+                              Si None, utilise le chemin par défaut 'data/snomed_fr' dans le projet.
         """
-        if snomed_base_path is None:
-            # Chemin par défaut vers le dossier SNOMED CT
-            home = Path.home()
-            snomed_base_path = home / "Downloads" / "terminologie-snomed-ct-fr-Juin 2024 v1.0 (1)"
-        
-        self.snomed_path = Path(snomed_base_path)
-        self.snapshot_path = self._find_snapshot_path()
+        if snomed_data_path is None:
+            # Chemin par défaut vers le dossier de données SNOMED CT dans le projet
+            self.snapshot_path = Path("data/snomed_fr") 
+        else:
+            self.snapshot_path = Path(snomed_data_path)
         
         # Dictionnaires pour stocker les données chargées
         self.valid_concepts: Set[str] = set()  # SCTID valides
@@ -37,38 +35,14 @@ class SNOMEDValidator:
         self._loaded = False
     
     def _find_snapshot_path(self) -> Optional[Path]:
-        """Trouver le chemin vers les fichiers Snapshot"""
-        try:
-            # Chercher le dossier avec la structure attendue
-            src_path = self.snomed_path / "src"
-            if not src_path.exists():
-                print(f"❌ Dossier src non trouvé dans {self.snomed_path}")
-                return None
-            
-            # Trouver le dossier de production (nom peut varier)
-            production_dirs = list(src_path.glob("SnomedCT_*"))
-            if not production_dirs:
-                print(f"❌ Aucun dossier de production trouvé dans {src_path}")
-                return None
-            
-            # Filtrer pour prendre seulement les dossiers (pas les fichiers .zip)
-            production_dirs = [p for p in production_dirs if p.is_dir()]
-            if not production_dirs:
-                print(f"❌ Aucun dossier de production valide trouvé dans {src_path}")
-                return None
-            
-            production_path = production_dirs[0]
-            snapshot_path = production_path / "Snapshot" / "Terminology"
-            
-            if snapshot_path.exists():
-                return snapshot_path
-            else:
-                print(f"❌ Dossier Snapshot/Terminology non trouvé dans {production_path}")
-                return None
-                
-        except Exception as e:
-            print(f"❌ Erreur lors de la recherche du chemin Snapshot : {e}")
-            return None
+        """Déprécié: Le chemin est maintenant directement fourni ou par défaut."""
+        # Cette méthode n'est plus nécessaire car le chemin est direct
+        # On la garde pour compatibilité si elle était appelée ailleurs, mais elle ne devrait pas l'être.
+        # Retourne simplement le chemin déjà défini si on tente de l'appeler.
+        if hasattr(self, 'snapshot_path') and self.snapshot_path.exists():
+            return self.snapshot_path
+        print("⚠️ _find_snapshot_path est déprécié et ne devrait plus être utilisé directement.")
+        return None
     
     def load_snomed_data(self) -> bool:
         """Charger les données SNOMED CT depuis les fichiers officiels"""
