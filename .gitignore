@@ -10,6 +10,13 @@ venv/
 ENV/
 env/
 
+# Secrets et configuration
+.streamlit/secrets.toml
+config_local.py
+secrets.toml
+*.key
+*.pem
+
 # Fichiers spécifiques aux IDE
 .vscode/
 .idea/
