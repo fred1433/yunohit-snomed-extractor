@@ -12,6 +12,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# FORCER REDÉMARRAGE STREAMLIT CLOUD - v2.1
+
 def test_imports():
     """Teste les imports pour diagnostic"""
     try:
