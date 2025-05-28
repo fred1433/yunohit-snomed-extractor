@@ -1,0 +1,2 @@
+# Dépendances système pour Streamlit Cloud
+# Force la réinstallation des packages 
