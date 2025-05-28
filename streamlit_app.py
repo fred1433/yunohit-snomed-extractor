@@ -129,9 +129,12 @@ Traitement : Antihistaminique oral et soins locaux. Éviction scolaire recommand
                                         # Validation avec SNOMEDValidator
                                         validator = SNOMEDValidator()
                                         for res in validation_results:
-                                            val_result = validator.validate_code(res['code_snomed'])
-                                            res['valide'] = val_result['is_valid']
-                                            res['raison'] = val_result.get('reason', '')
+                                            is_valid = validator.validate_code(res['code_snomed'])
+                                            res['valide'] = is_valid
+                                            if not is_valid:
+                                                res['raison'] = 'Code SNOMED CT non trouvé dans la base officielle'
+                                            else:
+                                                res['raison'] = 'Validé par la base SNOMED CT française'
                                         
                                         # Affichage des résultats
                                         st.markdown("### 📊 Résultats de l'extraction")
