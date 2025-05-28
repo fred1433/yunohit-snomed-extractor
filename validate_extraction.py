@@ -72,34 +72,58 @@ Traitement : Antihistaminique oral et soins locaux. Éviction scolaire recommand
    • ✅ Codes VALIDES (base officielle) : {valid}
    • ❌ Codes INVALIDES : {invalid}  
    • ❓ Codes UNKNOWN : {unknown}
-   • �� Taux de validité : {success_rate:.1f}%
+   •  Taux de validité : {success_rate:.1f}%
 """
         console.print(Panel(stats_text, title="Résumé de validation", border_style="blue"))
         
-        # Tableau détaillé
-        table = Table(title="Détail de la validation")
-        table.add_column("Terme Gemini", style="cyan", no_wrap=True)
-        table.add_column("Code Gemini", style="magenta")
-        table.add_column("Statut", style="bold")
-        table.add_column("Terme Officiel", style="green")
+        # Tableau détaillé COMPLET (pour débogage)
+        table_complet = Table(title="Détail COMPLET de la validation (pour analyse)")
+        table_complet.add_column("Terme Gemini", style="cyan", no_wrap=True)
+        table_complet.add_column("Code Gemini", style="magenta")
+        table_complet.add_column("Statut", style="bold")
+        table_complet.add_column("Terme Officiel SNOMED CT", style="green")
         
         for detail in validation_stats["validation_details"]:
             status_emoji = "✅" if detail["status"] == "VALID" else "❌" if detail["status"] == "INVALID" else "❓"
             status_text = f"{status_emoji} {detail['status']}"
             
-            official_term = detail.get("official_term", "") or ""
-            if not official_term and detail["status"] == "VALID":
-                official_term = "(terme non trouvé)"
+            current_official_term = detail.get("official_term", "") or ""
+            if not current_official_term and detail["status"] == "VALID":
+                current_official_term = "(terme non trouvé)"
             
-            table.add_row(
+            table_complet.add_row(
                 detail["term"][:30] + "..." if len(detail["term"]) > 30 else detail["term"],
                 detail["gemini_code"],
                 status_text,
-                official_term[:40] + "..." if len(official_term) > 40 else official_term
+                current_official_term[:40] + "..." if len(current_official_term) > 40 else current_official_term
             )
         
-        console.print(table)
+        console.print(table_complet)
+        console.print("\n" + "-"*80 + "\n") # Séparateur
+
+        # Tableau filtré (pour le client)
+        table_filtre = Table(title="Tableau CLIENT : Correspondances SNOMED CT valides et termes officiels identifiés")
+        table_filtre.add_column("Terme Gemini", style="cyan", no_wrap=True)
+        table_filtre.add_column("Code Gemini", style="magenta")
+        table_filtre.add_column("Terme Officiel SNOMED CT", style="green")
         
+        filtered_rows_count = 0
+        for detail in validation_stats["validation_details"]:
+            official_term_pour_filtre = detail.get("official_term", "") or ""
+            
+            if detail["status"] == "VALID" and official_term_pour_filtre and official_term_pour_filtre != "(terme non trouvé)":
+                filtered_rows_count += 1
+                table_filtre.add_row(
+                    detail["term"][:30] + "..." if len(detail["term"]) > 30 else detail["term"],
+                    detail["gemini_code"],
+                    official_term_pour_filtre[:40] + "..." if len(official_term_pour_filtre) > 40 else official_term_pour_filtre
+                )
+        
+        console.print(table_filtre)
+        
+        if filtered_rows_count == 0 and total > 0:
+            console.print("\nℹ️ [yellow]CLIENT : Aucun code Gemini n'a correspondu à un code SNOMED CT valide avec un terme officiel identifiable.[/yellow]")
+
         # Conclusion
         if total > 0:
             success_rate = (valid / total) * 100
