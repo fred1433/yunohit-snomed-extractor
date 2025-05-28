@@ -41,3 +41,38 @@ Le programme va :
 - `snomed_extractor.py` : Extracteur d'informations SNOMED CT
 - `models.py` : Modèles de données
 - `config.py` : Configuration du projet 
+
+## 🛡️ Sécurité API Intégrée
+
+Le projet inclut un système de sécurité robuste pour protéger contre les abus et surcoûts :
+
+### Protections Automatiques
+- **Limites quotidiennes** : 200 appels API maximum par jour
+- **Limites horaires** : 40 appels API maximum par heure
+- **Tracking des coûts** : Surveillance automatique des dépenses
+- **Alertes automatiques** : Notifications à 80% des limites
+
+### Tableau de Bord de Surveillance
+```bash
+python security_stats.py
+```
+
+### Configuration des Limites
+Modifiez dans `config.py` :
+```python
+DAILY_API_LIMIT = 200     # Appels/jour
+HOURLY_API_LIMIT = 40     # Appels/heure
+COST_ALERT_THRESHOLD = 5.0  # Alerte coût €/jour
+```
+
+### Fonctionnalités
+- 📊 **Tableaux de bord visuels** avec barres de progression
+- 📈 **Historique 7 jours** avec graphiques
+- 💰 **Estimation coûts** jour/mois/30 jours
+- 🚨 **Alertes intelligentes** pour dépassements
+- 🔄 **Auto-nettoyage** des anciennes données (30 jours)
+- 🗑️ **Reset d'urgence** si nécessaire
+
+## 📊 Performance et Résultats
+
+// ... existing code ... 

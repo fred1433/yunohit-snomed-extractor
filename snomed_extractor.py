@@ -4,6 +4,7 @@ import re
 from typing import Dict, Any
 from config import Config
 from models import MedicalNote, SNOMEDExtraction, ClinicalFinding, Procedure, BodyStructure
+from api_security import security_manager
 
 class SNOMEDExtractor:
     """Extracteur d'informations SNOMED CT à partir de notes médicales"""
@@ -76,10 +77,23 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
     def extract_snomed_info(self, medical_note: MedicalNote) -> SNOMEDExtraction:
         """Extraction optimisée ONE-SHOT avec codes SNOMED CT et modifieurs contextuels"""
         try:
+            # 🛡️ SÉCURITÉ : Vérifier les limites avant l'appel API
+            can_proceed, message = security_manager.can_make_request()
+            if not can_proceed:
+                print(f"🚫 EXTRACTION BLOQUÉE : {message}")
+                print("⏰ Réessayez plus tard ou contactez l'administrateur")
+                return self._create_empty_extraction(medical_note)
+            
+            print(f"🔒 Sécurité : {message}")
             print("🔍 Extraction ONE-SHOT avec modifieurs contextuels...")
+            
             prompt = self.create_extraction_prompt(medical_note.content)
             
             response = self.model.generate_content(prompt)
+            
+            # 🛡️ SÉCURITÉ : Enregistrer l'appel API réussi
+            security_manager.record_api_call(estimated_cost=0.015)  # Coût estimé pour Gemini Flash
+            security_manager.print_usage_warning()
             
             if hasattr(response, 'candidates') and response.candidates:
                 candidate = response.candidates[0]
