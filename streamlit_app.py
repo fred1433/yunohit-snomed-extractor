@@ -2,6 +2,7 @@ import streamlit as st
 import time
 import re
 from typing import Dict, List, Any
+import os
 
 # Configuration de la page
 st.set_page_config(
@@ -63,32 +64,65 @@ Traitement : Antihistaminique oral et soins locaux. Éviction scolaire recommand
                     with col1:
                         if st.button("🚀 Extraire les Entités SNOMED", type="primary"):
                             try:
+                                # Configuration de l'API key via environnement
+                                os.environ['GOOGLE_API_KEY'] = api_key
+                                
                                 # Import direct ici pour éviter les problèmes de subprocess
                                 from snomed_extractor import SNOMEDExtractor
                                 from snomed_validator import SNOMEDValidator
+                                from models import MedicalNote
                                 
                                 with st.spinner("🔄 Extraction en cours..."):
                                     start_time = time.time()
                                     
                                     # Extraction
-                                    extractor = SNOMEDExtractor(api_key)
-                                    result = extractor.extract_medical_entities(note_content)
+                                    extractor = SNOMEDExtractor()
+                                    medical_note = MedicalNote(content=note_content)
+                                    result = extractor.extract_snomed_info(medical_note)
                                     extraction_time = time.time() - start_time
                                     
-                                    if result and 'entites' in result:
+                                    if result and result.clinical_findings or result.procedures or result.body_structures:
                                         st.success(f"✅ Extraction réussie en {extraction_time:.1f}s")
                                         
-                                        # Validation
-                                        validator = SNOMEDValidator()
+                                        # Convertir en format pour affichage
                                         validation_results = []
                                         
-                                        for entite in result['entites']:
-                                            val_result = validator.validate_code(entite.get('code_snomed', ''))
+                                        # Ajouter clinical findings
+                                        for cf in result.clinical_findings:
                                             validation_results.append({
-                                                **entite,
-                                                'valide': val_result['is_valid'],
-                                                'raison': val_result.get('reason', '')
+                                                'terme': cf.term,
+                                                'code_snomed': cf.snomed_code,
+                                                'categorie': 'Clinical Finding',
+                                                'valide': True,  # Pour l'instant, on suppose valide
+                                                'raison': ''
                                             })
+                                        
+                                        # Ajouter procedures
+                                        for proc in result.procedures:
+                                            validation_results.append({
+                                                'terme': proc.term,
+                                                'code_snomed': proc.snomed_code,
+                                                'categorie': 'Procedure',
+                                                'valide': True,
+                                                'raison': ''
+                                            })
+                                        
+                                        # Ajouter body structures
+                                        for bs in result.body_structures:
+                                            validation_results.append({
+                                                'terme': bs.term,
+                                                'code_snomed': bs.snomed_code,
+                                                'categorie': 'Body Structure',
+                                                'valide': True,
+                                                'raison': ''
+                                            })
+                                        
+                                        # Validation avec SNOMEDValidator
+                                        validator = SNOMEDValidator()
+                                        for res in validation_results:
+                                            val_result = validator.validate_code(res['code_snomed'])
+                                            res['valide'] = val_result['is_valid']
+                                            res['raison'] = val_result.get('reason', '')
                                         
                                         # Affichage des résultats
                                         st.markdown("### 📊 Résultats de l'extraction")
@@ -124,7 +158,13 @@ Traitement : Antihistaminique oral et soins locaux. Éviction scolaire recommand
                                         
                                         # JSON brut optionnel
                                         with st.expander("📄 Voir les données JSON brutes"):
-                                            st.json(result)
+                                            # Convertir l'objet en dict pour l'affichage
+                                            result_dict = {
+                                                'clinical_findings': [{'term': cf.term, 'snomed_code': cf.snomed_code, 'description': cf.description} for cf in result.clinical_findings],
+                                                'procedures': [{'term': proc.term, 'snomed_code': proc.snomed_code, 'description': proc.description} for proc in result.procedures],
+                                                'body_structures': [{'term': bs.term, 'snomed_code': bs.snomed_code, 'description': bs.description} for bs in result.body_structures]
+                                            }
+                                            st.json(result_dict)
                                     
                                     else:
                                         st.warning("⚠️ Aucune entité extraite")
