@@ -232,4 +232,4 @@ Traitement : Antihistaminique oral et soins locaux. Éviction scolaire recommand
     return 0
 
 if __name__ == "__main__":
-    exit(main()) 
+    exit(main()) w
