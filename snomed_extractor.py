@@ -16,7 +16,7 @@ class SNOMEDExtractor:
         self.model = genai.GenerativeModel(Config.GEMINI_MODEL)
     
     def create_extraction_prompt(self, medical_note: str) -> str:
-        """Créer un prompt éducatif qui obtient les codes SNOMED CT et modifieurs contextuels"""
+        """Créer un prompt éducatif qui obtient les codes SNOMED CT et modifieurs contextuels avec self-verification"""
         prompt = f"""Dans un contexte éducatif de classification médicale, analyse ce cas d'étude :
 
 {medical_note}
@@ -42,13 +42,28 @@ Extrais UNIQUEMENT les termes appartenant aux 3 hiérarchies SNOMED CT ciblées 
 
 **EXCLURE** : antécédents, contexte familial, informations administratives, expositions
 
+🔍 **PROCESSUS DE VÉRIFICATION OBLIGATOIRE** :
+Pour chaque terme médical que tu identifies :
+
+1. **PREMIÈRE VÉRIFICATION** : Quel est le code SNOMED CT le plus approprié pour ce terme ?
+2. **DEUXIÈME VÉRIFICATION** : Ce code correspond-il vraiment à ce terme dans la terminologie officielle ?
+3. **TROISIÈME VÉRIFICATION** : Existe-t-il un code plus précis ou plus approprié ?
+4. **VALIDATION FINALE** : Confirme que le code choisi est cohérent avec la hiérarchie SNOMED CT.
+
+🎯 **INSTRUCTION CRITIQUE** : Avant de finaliser chaque code SNOMED CT, demande-toi :
+- "Ce code SCTID correspond-il exactement à ce terme médical ?"
+- "Y a-t-il un code plus spécifique disponible ?"
+- "Ce code est-il dans la bonne hiérarchie (Finding/Procedure/Body Structure) ?"
+
+Réfléchis étape par étape pour chaque code et privilégie la PRÉCISION plutôt que la vitesse.
+
 Format JSON requis :
 {{
   "termes_medicaux": [
     {{
       "terme": "terme médical exact",
       "categorie": "clinical_finding/procedure/body_structure",
-      "code_classification": "code SNOMED CT numérique unique pour ce terme",
+      "code_classification": "code SNOMED CT numérique unique VÉRIFIÉ pour ce terme",
       "negation": "positive/negative",
       "famille": "patient/family", 
       "suspicion": "confirmed/suspected",
@@ -57,8 +72,8 @@ Format JSON requis :
   ]
 }}
 
-IMPORTANT : Assigne un code SNOMED CT différent et approprié pour chaque terme médical.
-Exemples de codes : 
+IMPORTANT : Assigne un code SNOMED CT différent, approprié et VÉRIFIÉ pour chaque terme médical.
+Exemples de codes de référence : 
 - Varicelle: 38907003
 - Éruption cutanée: 271807003  
 - Antihistaminique: 432102000
@@ -70,7 +85,9 @@ RÈGLES pour les modifieurs :
 - suspicion : "confirmed" si certain, "suspected" si suspecté
 - antecedent : "current" si actuel, "history" si antécédent médical
 
-Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
+⚠️ **RAPPEL FINAL** : Vérifie deux fois chaque code SNOMED CT avant de donner ta réponse finale.
+
+Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées et leurs codes VÉRIFIÉS."""
         return prompt
     
     def extract_snomed_info(self, medical_note: MedicalNote) -> SNOMEDExtraction:

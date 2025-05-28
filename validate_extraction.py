@@ -4,6 +4,7 @@ Script de validation des extractions SNOMED CT
 Valide tous les codes générés par Gemini contre la base officielle française
 """
 
+import time
 from datetime import datetime
 from rich.console import Console
 from rich.panel import Panel
@@ -40,9 +41,23 @@ def format_modifiers(item) -> str:
     
     return " ".join(modifiers) if modifiers else "—"
 
+def format_duration(seconds: float) -> str:
+    """Formater la durée en format lisible"""
+    if seconds < 1:
+        return f"{seconds*1000:.0f}ms"
+    elif seconds < 60:
+        return f"{seconds:.1f}s"
+    else:
+        minutes = int(seconds // 60)
+        remaining_seconds = seconds % 60
+        return f"{minutes}m {remaining_seconds:.1f}s"
+
 def main():
     """Fonction principale de validation"""
     console = Console()
+    
+    # Démarrer le chronomètre global
+    start_time_global = time.time()
     
     # Affichage du titre
     title = Text("🔬 Validation des codes SNOMED CT contre la base officielle", style="bold blue")
@@ -68,13 +83,27 @@ Traitement : Antihistaminique oral et soins locaux. Éviction scolaire recommand
     try:
         # Étape 1 : Extraction avec Gemini
         console.print("\n🔄 ÉTAPE 1 : Extraction avec Google Gemini...")
+        start_time_extraction = time.time()
+        
         extractor = SNOMEDExtractor()
         extraction = extractor.extract_snomed_info(medical_note)
         
+        end_time_extraction = time.time()
+        extraction_duration = end_time_extraction - start_time_extraction
+        
+        console.print(f"⏱️  Temps d'extraction : {format_duration(extraction_duration)}")
+        
         # Étape 2 : Validation avec base officielle
         console.print("\n🔄 ÉTAPE 2 : Validation avec base SNOMED CT officielle...")
+        start_time_validation = time.time()
+        
         validator = SNOMEDValidator()
         validation_stats = validator.validate_extraction_result(extraction)
+        
+        end_time_validation = time.time()
+        validation_duration = end_time_validation - start_time_validation
+        
+        console.print(f"⏱️  Temps de validation : {format_duration(validation_duration)}")
         
         if "error" in validation_stats:
             console.print(f"❌ [red]Erreur de validation : {validation_stats['error']}[/red]")
@@ -92,6 +121,10 @@ Traitement : Antihistaminique oral et soins locaux. Éviction scolaire recommand
         unknown = validation_stats["unknown_codes"]
         success_rate = (valid/total*100) if total > 0 else 0
         
+        # Calculer le temps total
+        end_time_global = time.time()
+        total_duration = end_time_global - start_time_global
+        
         stats_text = f"""
 📊 STATISTIQUES GLOBALES :
    • Total des codes analysés : {total}
@@ -99,6 +132,11 @@ Traitement : Antihistaminique oral et soins locaux. Éviction scolaire recommand
    • ❌ Codes INVALIDES : {invalid}  
    • ❓ Codes UNKNOWN : {unknown}
    •  Taux de validité : {success_rate:.1f}%
+
+⏱️  PERFORMANCES :
+   • Temps d'extraction Gemini : {format_duration(extraction_duration)}
+   • Temps de validation SNOMED : {format_duration(validation_duration)}
+   • ⏰ TEMPS TOTAL : {format_duration(total_duration)}
 """
         console.print(Panel(stats_text, title="Résumé de validation", border_style="blue"))
         
@@ -173,7 +211,7 @@ Traitement : Antihistaminique oral et soins locaux. Éviction scolaire recommand
 """
         console.print(Panel(legend_text, title="Légende", border_style="cyan"))
 
-        # Conclusion
+        # Conclusion avec temps
         if total > 0:
             success_rate = (valid / total) * 100
             if success_rate >= 80:
@@ -184,6 +222,8 @@ Traitement : Antihistaminique oral et soins locaux. Éviction scolaire recommand
                 console.print(f"\n⚠️  [red]ATTENTION ! {success_rate:.1f}% de codes valides - Amélioration nécessaire[/red]")
         else:
             console.print("\n❌ [red]Aucun code à valider[/red]")
+        
+        console.print(f"\n🏁 [bold cyan]Traitement terminé en {format_duration(total_duration)}[/bold cyan]")
         
     except Exception as e:
         console.print(f"\n❌ [red]Erreur : {e}[/red]")
