@@ -6,24 +6,20 @@ Sans rich, adaptée pour l'environnement cloud
 
 import sys
 import time
+import os
 from typing import Dict, List, Any
 import json
 
-# Imports adaptés pour Streamlit Cloud
-try:
-    from config_unified import GEMINI_API_KEY, MODEL_CONFIG
-except ImportError:
-    # Fallback direct pour Streamlit Cloud
-    import os
-    import streamlit as st
-    GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY"))
-    MODEL_CONFIG = {
-        'model_name': 'gemini-2.0-flash-exp',
-        'temperature': 0.3,
-        'max_output_tokens': 8192,
-        'top_p': 0.8,
-        'top_k': 40
-    }
+# Configuration simple sans imports Streamlit
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+
+MODEL_CONFIG = {
+    'model_name': 'gemini-2.0-flash-exp',
+    'temperature': 0.3,
+    'max_output_tokens': 8192,
+    'top_p': 0.8,
+    'top_k': 40
+}
 
 from snomed_extractor import SnomedExtractor
 from snomed_validator import SnomedValidator

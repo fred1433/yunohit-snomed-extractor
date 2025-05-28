@@ -7,6 +7,7 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict
 import pandas as pd
+import os
 
 # Configuration de la page
 st.set_page_config(
@@ -224,54 +225,39 @@ def run_extraction(mode: str, note_content: str) -> dict:
     
     # Vérifier d'abord que les secrets sont configurés
     try:
-        from config_unified import GEMINI_API_KEY
-        if not GEMINI_API_KEY:
+        # Récupérer l'API key depuis les secrets Streamlit
+        try:
+            api_key = st.secrets.get("GEMINI_API_KEY")
+        except:
+            api_key = None
+            
+        if not api_key:
             return {
                 'success': False,
                 'output': "",
-                'error': """🔐 CONFIGURATION REQUISE
-
-❌ L'API Key Gemini n'est pas configurée.
-
-📋 ÉTAPES DE CONFIGURATION :
-1. Cliquez sur ⚙️ Settings (en bas à droite)
-2. Allez dans l'onglet "Secrets"  
-3. Ajoutez : GEMINI_API_KEY = "votre_clé_ici"
-4. Cliquez Save
-5. L'app redémarre automatiquement
-
-🔗 Guide complet : SETUP_SECRETS.md dans le repo"""
+                'error': "❌ API Key non trouvée dans les secrets Streamlit"
             }
-    except Exception as e:
-        return {
-            'success': False,
-            'output': "",
-            'error': f"""🔐 ERREUR DE CONFIGURATION
-
-❌ Problème de configuration : {str(e)}
-
-📋 SOLUTION :
-1. Configurez GEMINI_API_KEY dans les secrets Streamlit
-2. ⚙️ Settings → Secrets → GEMINI_API_KEY = "votre_clé"
-
-🔗 Plus d'infos : SETUP_SECRETS.md"""
-        }
-    
-    try:
+        
+        # Préparer l'environnement pour le subprocess
+        env = os.environ.copy()
+        env['GEMINI_API_KEY'] = api_key
+        
         if mode == "Standard":
             result = subprocess.run(
                 ['python', 'validate_extraction_streamlit.py'], 
                 capture_output=True, 
                 text=True, 
                 timeout=180,
-                input=note_content
+                input=note_content,
+                env=env
             )
         else:  # Haute Précision
             result = subprocess.run(
                 ['python', 'extract_high_precision.py'], 
                 capture_output=True, 
                 text=True, 
-                timeout=300
+                timeout=300,
+                env=env
             )
         
         if result.returncode == 0:
