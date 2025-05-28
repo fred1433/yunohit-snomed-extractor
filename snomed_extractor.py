@@ -21,13 +21,34 @@ class SNOMEDExtractor:
 
 {medical_note}
 
-Extrais les termes avec leur classification SNOMED CT et leurs modifieurs contextuels :
+Extrais UNIQUEMENT les termes appartenant aux 3 hiérarchies SNOMED CT ciblées :
+
+1. **CLINICAL FINDING** (Constatations cliniques) :
+   - Symptômes observés (ex: éruption cutanée, prurit)
+   - Signes cliniques (ex: lésions vésiculeuses)
+   - Diagnostics établis (ex: varicelle)
+   - États pathologiques
+
+2. **PROCEDURE** (Interventions/Procédures) :
+   - Traitements administrés (ex: antihistaminique oral)
+   - Soins médicaux (ex: soins locaux)
+   - Recommandations thérapeutiques (ex: éviction scolaire)
+   - Actes médicaux
+
+3. **BODY STRUCTURE** (Structures corporelles) :
+   - Parties anatomiques mentionnées (ex: membres, tronc)
+   - Organes, régions corporelles
+   - Structures anatomiques
+
+**EXCLURE** : antécédents, contexte familial, informations administratives, expositions
+
+Format JSON requis :
 {{
   "termes_medicaux": [
     {{
-      "terme": "...",
-      "categorie": "symptome/traitement/anatomie",
-      "code_classification": "...",
+      "terme": "terme médical exact",
+      "categorie": "clinical_finding/procedure/body_structure",
+      "code_classification": "code SNOMED CT numérique unique pour ce terme",
       "negation": "positive/negative",
       "famille": "patient/family", 
       "suspicion": "confirmed/suspected",
@@ -36,13 +57,20 @@ Extrais les termes avec leur classification SNOMED CT et leurs modifieurs contex
   ]
 }}
 
+IMPORTANT : Assigne un code SNOMED CT différent et approprié pour chaque terme médical.
+Exemples de codes : 
+- Varicelle: 38907003
+- Éruption cutanée: 271807003  
+- Antihistaminique: 432102000
+- Membres: 445662006
+
 RÈGLES pour les modifieurs :
-- négation : "positive" si présent, "negative" si absent/nié (ex: "pas de fièvre")
+- négation : "positive" si présent, "negative" si absent/nié
 - famille : "patient" pour le patient, "family" pour antécédent familial
-- suspicion : "confirmed" si certain, "suspected" si suspecté/possible
+- suspicion : "confirmed" si certain, "suspected" si suspecté
 - antecedent : "current" si actuel, "history" si antécédent médical
 
-Retourne uniquement le JSON avec codes SNOMED CT et modifieurs précis."""
+Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
         return prompt
     
     def extract_snomed_info(self, medical_note: MedicalNote) -> SNOMEDExtraction:
@@ -93,7 +121,7 @@ Retourne uniquement le JSON avec codes SNOMED CT et modifieurs précis."""
                 suspicion = terme_data.get("suspicion", "confirmed")
                 antecedent = terme_data.get("antecedent", "current")
                 
-                if "symptome" in categorie or "diagnostic" in categorie or "finding" in categorie:
+                if "symptome" in categorie or "diagnostic" in categorie or "finding" in categorie or "clinical_finding" in categorie:
                     clinical_findings.append(ClinicalFinding(
                         term=terme,
                         description=f"Constatation clinique : {terme}",
@@ -117,7 +145,7 @@ Retourne uniquement le JSON avec codes SNOMED CT et modifieurs précis."""
                         suspicion=suspicion,
                         antecedent=antecedent
                     ))
-                elif "anatomie" in categorie or "structure" in categorie or "corps" in categorie:
+                elif "anatomie" in categorie or "structure" in categorie or "corps" in categorie or "body_structure" in categorie:
                     body_structures.append(BodyStructure(
                         term=terme,
                         description=f"Structure corporelle : {terme}",
@@ -130,18 +158,9 @@ Retourne uniquement le JSON avec codes SNOMED CT et modifieurs précis."""
                         antecedent=antecedent
                     ))
                 else:
-                    # Catégorie non reconnue, ajouter aux constatations cliniques par défaut
-                    clinical_findings.append(ClinicalFinding(
-                        term=terme,
-                        description=f"Terme médical : {terme}",
-                        context=f"Extrait de la note médicale",
-                        snomed_code=code_snomed,
-                        snomed_term_fr=terme,
-                        negation=negation,
-                        family=family,
-                        suspicion=suspicion,
-                        antecedent=antecedent
-                    ))
+                    # Ignorer les termes qui ne correspondent à aucune des 3 hiérarchies ciblées
+                    print(f"⚠️  Terme ignoré (hors hiérarchies ciblées) : {terme} ({categorie})")
+                    continue
             
             print(f"✅ Extraction réussie : {len(clinical_findings)} constatations, {len(procedures)} procédures, {len(body_structures)} structures")
             return SNOMEDExtraction(
