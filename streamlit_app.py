@@ -79,7 +79,14 @@ Traitement : Antihistaminique oral et soins locaux. Éviction scolaire recommand
                                     
                                     # Extraction
                                     extractor = SNOMEDExtractor()
-                                    medical_note = MedicalNote(content=note_content)
+                                    medical_note = MedicalNote(
+                                        patient_id="DEMO_001",
+                                        patient_name="Patient Démo", 
+                                        date="2025-01-01",
+                                        doctor="Dr. Streamlit",
+                                        content=note_content,
+                                        specialty="Médecine générale"
+                                    )
                                     result = extractor.extract_snomed_info(medical_note)
                                     extraction_time = time.time() - start_time
                                     
