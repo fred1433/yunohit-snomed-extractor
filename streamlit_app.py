@@ -221,6 +221,42 @@ def extract_tables_from_output(output: str) -> Dict[str, str]:
 
 def run_extraction(mode: str, note_content: str) -> dict:
     """Lance une extraction selon le mode choisi"""
+    
+    # Vérifier d'abord que les secrets sont configurés
+    try:
+        from config_unified import GEMINI_API_KEY
+        if not GEMINI_API_KEY:
+            return {
+                'success': False,
+                'output': "",
+                'error': """🔐 CONFIGURATION REQUISE
+
+❌ L'API Key Gemini n'est pas configurée.
+
+📋 ÉTAPES DE CONFIGURATION :
+1. Cliquez sur ⚙️ Settings (en bas à droite)
+2. Allez dans l'onglet "Secrets"  
+3. Ajoutez : GEMINI_API_KEY = "votre_clé_ici"
+4. Cliquez Save
+5. L'app redémarre automatiquement
+
+🔗 Guide complet : SETUP_SECRETS.md dans le repo"""
+            }
+    except Exception as e:
+        return {
+            'success': False,
+            'output': "",
+            'error': f"""🔐 ERREUR DE CONFIGURATION
+
+❌ Problème de configuration : {str(e)}
+
+📋 SOLUTION :
+1. Configurez GEMINI_API_KEY dans les secrets Streamlit
+2. ⚙️ Settings → Secrets → GEMINI_API_KEY = "votre_clé"
+
+🔗 Plus d'infos : SETUP_SECRETS.md"""
+        }
+    
     try:
         if mode == "Standard":
             result = subprocess.run(
@@ -252,13 +288,18 @@ def run_extraction(mode: str, note_content: str) -> dict:
             return {
                 'success': False,
                 'output': result.stdout,
-                'error': result.stderr
+                'error': f"""❌ ERREUR D'EXÉCUTION
+
+{result.stderr}
+
+💡 Si c'est une erreur de dépendance, l'app va se redéployer automatiquement.
+🔧 Si c'est une erreur de configuration, vérifiez les secrets."""
             }
     except Exception as e:
         return {
             'success': False,
             'output': "",
-            'error': str(e)
+            'error': f"Erreur d'exécution : {str(e)}"
         }
 
 def main():

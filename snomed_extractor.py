@@ -73,7 +73,7 @@ RÈGLES pour les modifieurs :
 
 Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
         return prompt
-
+    
     def extract_snomed_info(self, medical_note: MedicalNote) -> SNOMEDExtraction:
         """Extraction optimisée ONE-SHOT avec codes SNOMED CT et modifieurs contextuels"""
         try:
