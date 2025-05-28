@@ -13,8 +13,15 @@ class SNOMEDExtractor:
         """Initialiser l'extracteur avec le modèle Gemini"""
         Config.validate()
         genai.configure(api_key=Config.GOOGLE_API_KEY)
-        # Modèle sans config pour éviter les blocages de sécurité
-        self.model = genai.GenerativeModel(Config.GEMINI_MODEL)
+        # Modèle configurable
+        self.model_name = Config.GEMINI_MODEL
+        self.model = genai.GenerativeModel(self.model_name)
+    
+    def set_model(self, model_name: str):
+        """Changer le modèle utilisé"""
+        self.model_name = model_name
+        self.model = genai.GenerativeModel(self.model_name)
+        print(f"🔄 Modèle changé vers : {model_name}")
     
     def create_extraction_prompt(self, medical_note: str) -> str:
         """Créer un prompt éducatif optimisé pour extraction complète"""
