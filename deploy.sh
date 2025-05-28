@@ -66,7 +66,7 @@ fi
 
 # Push vers GitHub
 echo -e "\n${BLUE}📤 Push vers GitHub...${NC}"
-if git push origin master; then
+if git push github master; then
     echo -e "${GREEN}✅ Push réussi${NC}"
 else
     echo -e "${RED}❌ Erreur lors du push${NC}"
