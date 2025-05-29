@@ -256,10 +256,25 @@ def main():
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 2rem;
         border-radius: 20px;
-        color: white;
+        color: white !important;
         text-align: center;
         margin-bottom: 2rem;
         box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
+    }
+    
+    /* Forcer absolument la couleur blanche pour le titre du header */
+    .main-header h1 {
+        color: white !important;
+        font-weight: 700 !important;
+    }
+    
+    .main-header p {
+        color: white !important;
+        opacity: 0.9 !important;
+    }
+    
+    .main-header * {
+        color: white !important;
     }
     
     /* Amélioration des métriques */
@@ -593,48 +608,12 @@ Traitement symptomatique en attente des résultats.""",
             # Toggle pour mode développement (modèle rapide)
             st.markdown("---")
             
-            # Toggle pour prévisualisation mode production AVANT les autres
-            preview_production = st.checkbox(
-                "👁️ Prévisualiser l'interface de production (masquer les éléments de développement)",
-                value=False,
-                help="Voir l'interface telle qu'elle apparaîtra au client final"
-            )
-            
-            # Toggle Flash TOUJOURS visible (trop utile même en prévisualisation)
-            use_flash_model = st.checkbox(
-                "🚀 Mode développement : Utiliser Gemini 2.5 Flash (plus rapide, moins précis)",
-                value=False,
-                help="Mode Flash pour tests rapides - Ne pas utiliser pour la production client"
-            )
-            
-            # Mode démonstration pour tests interface instantanés
-            demo_mode = st.checkbox(
-                "🎭 Mode démonstration : Afficher des résultats fixes (instantané)",
-                value=False,
-                help="Résultats factices pour tester l'interface sans attendre ni consommer d'API"
-            )
-            
-            # Mode fusion ultime - seulement si pas en mode Flash
-            if not use_flash_model and not preview_production:
-                fusion_mode = st.checkbox(
-                    "🚀 MÉTHODE ULTIME : Fusion de 3 extractions + validation (recommandé)",
-                    value=False,
-                    help="Combine TOUS les résultats validés de 3 extractions pour maximiser les entités trouvées"
-                )
-                
-                # Nouvelle méthode V2 avec validation sémantique
-                fusion_v2_mode = st.checkbox(
-                    "🧠 MÉTHODE ULTIME V2 : + Validation sémantique hybride (PREMIUM)",
-                    value=True,
-                    help="Version avancée avec filtrage intelligent des incohérences sémantiques via LLM hybride"
-                )
-            else:
-                fusion_mode = False
-                fusion_v2_mode = False
-            
-            # Afficher le warning seulement si pas en mode prévisualisation
-            if use_flash_model and not preview_production:
-                st.warning("⚠️ Mode développement activé - Qualité réduite")
+            # Mode production : Méthode ULTIME V2 activée par défaut
+            fusion_v2_mode = True
+            fusion_mode = False
+            use_flash_model = False
+            demo_mode = False
+            preview_production = False
             
             if st.button("🚀 Extraire les Entités SNOMED", type="primary"):
                 try:
@@ -728,7 +707,7 @@ Traitement symptomatique en attente des résultats.""",
                     # Configuration de l'API key via environnement
                     os.environ['GOOGLE_API_KEY'] = api_key
                     
-                    with st.spinner("🔄 Extraction en cours..."):
+                    with st.spinner("🔄 Extraction en cours... (environ 1 minute)"):
                         start_time = time.time()
                         
                         # Extraction avec choix du modèle
