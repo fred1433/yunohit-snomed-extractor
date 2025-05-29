@@ -355,4 +355,128 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
             
         except Exception as e:
             print(f"❌ Erreur extraction triple parallèle : {e}")
+            return self._create_empty_extraction(medical_note)
+    
+    def extract_triple_with_validation_fusion(self, medical_note: MedicalNote) -> SNOMEDExtraction:
+        """
+        MÉTHODE ULTIME : 3 extractions + validation + fusion de TOUS les résultats validés
+        Collecte et combine tous les termes validés des 3 extractions pour maximiser le résultat
+        """
+        try:
+            # 🛡️ SÉCURITÉ : Vérifier les limites avant les appels API
+            can_proceed, message = security_manager.can_make_request()
+            if not can_proceed:
+                print(f"🚫 EXTRACTION BLOQUÉE : {message}")
+                return self._create_empty_extraction(medical_note)
+            
+            print(f"🔒 Sécurité : {message}")
+            print("🎯 EXTRACTION TRIPLE + VALIDATION + FUSION commencée...")
+            
+            # Charger le validateur une seule fois pour toutes les validations
+            from snomed_validator import SNOMEDValidator
+            validator = SNOMEDValidator()
+            print("✅ Validateur SNOMED CT chargé")
+            
+            # Lancer 3 extractions séquentielles avec validation immédiate
+            all_valid_items = []
+            extraction_stats = []
+            
+            for i in range(3):
+                print(f"\n🔄 === EXTRACTION {i+1}/3 ===")
+                
+                # Extraction avec Gemini
+                extraction = self.extract_snomed_info(medical_note)
+                security_manager.record_api_call(estimated_cost=0.02)
+                
+                # Collecter tous les items extraits
+                all_items = (extraction.clinical_findings + 
+                           extraction.procedures + 
+                           extraction.body_structures)
+                
+                print(f"📊 Extraction {i+1} : {len(all_items)} termes extraits")
+                
+                # Validation immédiate des termes de cette extraction
+                valid_items_this_round = []
+                for item in all_items:
+                    if validator.validate_code(item.snomed_code):
+                        valid_items_this_round.append(item)
+                
+                print(f"✅ Validation {i+1} : {len(valid_items_this_round)}/{len(all_items)} termes validés")
+                
+                # Ajouter à la collection globale
+                all_valid_items.extend(valid_items_this_round)
+                
+                extraction_stats.append({
+                    'total': len(all_items),
+                    'valid': len(valid_items_this_round),
+                    'rate': (len(valid_items_this_round) / len(all_items) * 100) if len(all_items) > 0 else 0
+                })
+            
+            print(f"\n🔄 Total avant déduplication : {len(all_valid_items)} termes validés")
+            
+            # DÉDUPLICATION par code SNOMED (pas par terme)
+            seen_codes = set()
+            unique_valid_items = []
+            
+            for item in all_valid_items:
+                code = item.snomed_code
+                if code and code not in seen_codes:
+                    seen_codes.add(code)
+                    unique_valid_items.append(item)
+                    print(f"   ➕ {item.term} ({code})")
+                else:
+                    print(f"   🔄 Doublon ignoré : {item.term} ({code})")
+            
+            print(f"✨ Après déduplication : {len(unique_valid_items)} termes uniques validés")
+            
+            # Réorganiser par type pour créer l'objet final
+            final_clinical_findings = []
+            final_procedures = []
+            final_body_structures = []
+            
+            for item in unique_valid_items:
+                if hasattr(item, '__class__'):
+                    class_name = item.__class__.__name__
+                    if class_name == 'ClinicalFinding':
+                        final_clinical_findings.append(item)
+                    elif class_name == 'Procedure':
+                        final_procedures.append(item)
+                    elif class_name == 'BodyStructure':
+                        final_body_structures.append(item)
+            
+            # Statistiques finales
+            print(f"\n🎯 RÉSULTAT FINAL DE LA FUSION :")
+            print(f"   🔍 {len(final_clinical_findings)} constatations cliniques")
+            print(f"   ⚕️  {len(final_procedures)} procédures/traitements")
+            print(f"   🫀 {len(final_body_structures)} structures corporelles")
+            print(f"   📊 TOTAL : {len(unique_valid_items)} entités validées")
+            
+            # Afficher les statistiques par extraction
+            print(f"\n📈 STATISTIQUES PAR EXTRACTION :")
+            for i, stats in enumerate(extraction_stats, 1):
+                print(f"   Extraction {i} : {stats['valid']}/{stats['total']} ({stats['rate']:.1f}%)")
+            
+            # Calculer le gain vs méthode simple
+            total_extractions = sum(stats['total'] for stats in extraction_stats)
+            total_valid_before_fusion = sum(stats['valid'] for stats in extraction_stats)
+            gain = len(unique_valid_items) - max(stats['valid'] for stats in extraction_stats)
+            
+            print(f"\n🚀 PERFORMANCE DE LA FUSION :")
+            print(f"   📊 Avant fusion : max {max(stats['valid'] for stats in extraction_stats)} entités validées")
+            print(f"   ✨ Après fusion : {len(unique_valid_items)} entités uniques")
+            print(f"   📈 GAIN : +{gain} entités supplémentaires !")
+            
+            security_manager.print_usage_warning()
+            
+            return SNOMEDExtraction(
+                original_note=medical_note,
+                clinical_findings=final_clinical_findings,
+                procedures=final_procedures,
+                body_structures=final_body_structures
+            )
+            
+        except Exception as e:
+            print(f"❌ Erreur extraction triple + fusion : {e}")
+            import traceback
+            traceback.print_exc()
             return self._create_empty_extraction(medical_note) 

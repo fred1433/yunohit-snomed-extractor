@@ -612,6 +612,16 @@ Plan : Hospitalisation pour bilan cardiologique complet, incluant une coronarogr
                 help="Résultats factices pour tester l'interface sans attendre ni consommer d'API"
             )
             
+            # Mode fusion ultime - seulement si pas en mode Flash
+            if not use_flash_model and not preview_production:
+                fusion_mode = st.checkbox(
+                    "🚀 MÉTHODE ULTIME : Fusion de 3 extractions + validation (recommandé)",
+                    value=True,
+                    help="Combine TOUS les résultats validés de 3 extractions pour maximiser les entités trouvées"
+                )
+            else:
+                fusion_mode = False
+            
             # Afficher le warning seulement si pas en mode prévisualisation
             if use_flash_model and not preview_production:
                 st.warning("⚠️ Mode développement activé - Qualité réduite")
@@ -731,8 +741,11 @@ Plan : Hospitalisation pour bilan cardiologique complet, incluant une coronarogr
                         if use_flash_model:
                             # Mode développement : méthode rapide 1-étape avec Flash
                             result = extractor.extract_snomed_info(medical_note)
+                        elif fusion_mode:
+                            # Mode ULTIME : fusion de 3 extractions + validation
+                            result = extractor.extract_triple_with_validation_fusion(medical_note)
                         else:
-                            # Mode production : méthode 3 appels parallèles avec Gemini 2.5 Pro
+                            # Mode production standard : méthode 3 appels parallèles classique
                             result = extractor.extract_triple_parallel(medical_note)
                             
                         extraction_time = time.time() - start_time
