@@ -7,8 +7,8 @@ import pandas as pd
 
 # Configuration de la page
 st.set_page_config(
-    page_title="🏥 Extracteur SNOMED CT - Yunohit",
-    page_icon="🏥",
+    page_title="🤖 Extracteur SNOMED CT - Yunohit",
+    page_icon="🤖",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -519,7 +519,7 @@ def main():
     # Header principal redesigné
     st.markdown("""
     <div class="main-header">
-        <h1>🏥 PoC Extracteur SNOMED CT Yunohit</h1>
+        <h1>🤖 PoC Extracteur SNOMED CT Yunohit</h1>
         <p style="opacity: 0.9; font-size: 1.1rem; margin: 0.5rem 0 0 0;">
             Intelligence artificielle pour l'extraction d'entités médicales
         </p>
