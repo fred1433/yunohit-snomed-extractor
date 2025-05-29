@@ -598,26 +598,42 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
             
             for term_data in all_terms:
                 term = term_data['term']
-                # D'abord essayer de trouver un code pour ce terme
-                snomed_code = self.validator.find_code_by_term(term)
-                if snomed_code:
-                    # Vérifier que le code est valide
-                    if self.validator.validate_code(snomed_code):
-                        snomed_term = self.validator.get_french_term(snomed_code)
-                        if snomed_term:
-                            validated.append({
-                                'term': term,
-                                'snomed_code': snomed_code,
-                                'snomed_term': snomed_term,
-                                'valid': True,
-                                # Préserver les modifieurs contextuels
-                                'negation': term_data.get('negation', 'positive'),
-                                'family': term_data.get('family', 'patient'),
-                                'suspicion': term_data.get('suspicion', 'confirmed'),
-                                'antecedent': term_data.get('antecedent', 'current'),
-                                'category': term_data.get('category', 'clinical_finding')
-                            })
-                            valid_count += 1
+                
+                # 🎯 CORRECTION : Utiliser d'abord le code donné par Gemini
+                gemini_code = term_data.get('snomed_code', 'UNKNOWN')
+                snomed_code = None
+                snomed_term = None
+                
+                # Priorité 1 : Vérifier si le code de Gemini existe dans notre base
+                if gemini_code != 'UNKNOWN' and self.validator.validate_code(gemini_code):
+                    snomed_code = gemini_code
+                    snomed_term = self.validator.get_french_term(gemini_code)
+                    print(f"   ✅ Code Gemini validé : {term} → {gemini_code}")
+                else:
+                    # Priorité 2 : Fallback - chercher nous-mêmes un code pour ce terme
+                    fallback_code = self.validator.find_code_by_term(term)
+                    if fallback_code and self.validator.validate_code(fallback_code):
+                        snomed_code = fallback_code
+                        snomed_term = self.validator.get_french_term(fallback_code)
+                        print(f"   🔍 Code trouvé par recherche : {term} → {fallback_code}")
+                
+                # Si on a trouvé un code valide (Gemini ou recherche)
+                if snomed_code and snomed_term:
+                    validated.append({
+                        'term': term,
+                        'snomed_code': snomed_code,
+                        'snomed_term': snomed_term,
+                        'valid': True,
+                        # Préserver les modifieurs contextuels
+                        'negation': term_data.get('negation', 'positive'),
+                        'family': term_data.get('family', 'patient'),
+                        'suspicion': term_data.get('suspicion', 'confirmed'),
+                        'antecedent': term_data.get('antecedent', 'current'),
+                        'category': term_data.get('category', 'clinical_finding')
+                    })
+                    valid_count += 1
+                else:
+                    print(f"   ❌ Aucun code valide trouvé pour : {term} (Gemini: {gemini_code})")
             
             validation_time = time.time() - validation_start
             print(f"✅ Validation SNOMED {extraction_num} : {valid_count}/{len(all_terms)} termes validés (⏱️ {validation_time:.2f}s)")
@@ -656,37 +672,73 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
             original_term = term_data['term']
             snomed_term = term_data['snomed_term']
             if original_term.lower() != snomed_term.lower():
-                semantic_pairs.append((original_term, snomed_term, term_data['snomed_code']))
+                semantic_pairs.append((original_term, snomed_term))
         
         if not semantic_pairs:
-            print("✅ Aucune validation sémantique nécessaire (termes identiques)")
-            final_validated = list(unique_terms.values())
-            semantic_time = time.time() - semantic_start
+            print("📊 Aucune validation sémantique nécessaire : tous les termes sont identiques")
+            final_validated = []
+            for term_data in unique_terms.values():
+                entity = {
+                    'term': term_data['term'],
+                    'snomed_code': term_data['snomed_code'],
+                    'snomed_term': term_data['snomed_term'],
+                    'category': self._categorize_by_snomed_code(term_data['snomed_code']),
+                    'negation': term_data.get('negation', 'positive'),
+                    'family': term_data.get('family', 'patient'),
+                    'suspicion': term_data.get('suspicion', 'confirmed'),
+                    'antecedent': term_data.get('antecedent', 'current')
+                }
+                final_validated.append(entity)
         else:
             print(f"🔍 Validation sémantique hybride : {len(semantic_pairs)} paires à analyser")
             
             # Validation sémantique hybride
             semantic_results = await self._validate_semantic_coherence_batch(semantic_pairs)
             
-            # Application des résultats
-            final_validated = []
-            rejected_terms = []
-            
-            # Créer un dictionnaire pour recherche rapide
-            semantic_lookup = {}
-            for result in semantic_results:
-                key = (result['original_term'], result['snomed_term'])
-                semantic_lookup[key] = result
-            
-            for term_data in unique_terms.values():
-                original_term = term_data['term']
-                snomed_term = term_data['snomed_term']
-                key = (original_term, snomed_term)
+            # Application des résultats de validation sémantique
+            if semantic_pairs:
+                print(f"📊 Validation terminée : {len([r for r in semantic_results.values() if r['valid']])}/{len(semantic_pairs)} validées")
                 
-                if key in semantic_lookup:
-                    semantic_result = semantic_lookup[key]
-                    if semantic_result['valid']:
-                        print(f"   ✅ Conservé : {original_term} → {snomed_term}")
+                # Créer un dictionnaire pour associer les paires à leurs résultats
+                validation_results = {}
+                for i, (original_term, snomed_term) in enumerate(semantic_pairs):
+                    if i in semantic_results:
+                        validation_results[(original_term.lower(), snomed_term.lower())] = semantic_results[i]
+                
+                # Application des résultats
+                final_validated = []
+                rejected_terms = []
+                
+                for term_data in unique_terms.values():
+                    original_term = term_data['term']
+                    snomed_term = term_data['snomed_term']
+                    pair_key = (original_term.lower(), snomed_term.lower())
+                    
+                    # Vérifier si cette paire a été validée sémantiquement
+                    if pair_key in validation_results:
+                        semantic_result = validation_results[pair_key]
+                        if semantic_result['valid']:
+                            print(f"   ✅ Conservé : {original_term} → {snomed_term}")
+                            entity = {
+                                'term': term_data['term'],
+                                'snomed_code': term_data['snomed_code'],
+                                'snomed_term': term_data['snomed_term'],
+                                'category': self._categorize_by_snomed_code(term_data['snomed_code']),
+                                'negation': term_data.get('negation', 'positive'),
+                                'family': term_data.get('family', 'patient'),
+                                'suspicion': term_data.get('suspicion', 'confirmed'),
+                                'antecedent': term_data.get('antecedent', 'current')
+                            }
+                            final_validated.append(entity)
+                        else:
+                            print(f"   ❌ Rejeté : {original_term} → {snomed_term} ({semantic_result['reason']})")
+                            rejected_terms.append({
+                                'term': original_term,
+                                'reason': semantic_result['reason']
+                            })
+                    else:
+                        # Terme identique (pas besoin de validation sémantique) -> conservé automatiquement
+                        print(f"   ✅ Identique : {original_term} → {snomed_term}")
                         entity = {
                             'term': term_data['term'],
                             'snomed_code': term_data['snomed_code'],
@@ -698,25 +750,6 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
                             'antecedent': term_data.get('antecedent', 'current')
                         }
                         final_validated.append(entity)
-                    else:
-                        print(f"   ❌ Rejeté : {original_term} → {snomed_term} ({semantic_result['explanation']})")
-                        rejected_terms.append({
-                            'term': original_term,
-                            'reason': semantic_result['explanation']
-                        })
-                else:
-                    # Terme identique, conservé automatiquement
-                    entity = {
-                        'term': term_data['term'],
-                        'snomed_code': term_data['snomed_code'],
-                        'snomed_term': term_data['snomed_term'],
-                        'category': self._categorize_by_snomed_code(term_data['snomed_code']),
-                        'negation': term_data.get('negation', 'positive'),
-                        'family': term_data.get('family', 'patient'),
-                        'suspicion': term_data.get('suspicion', 'confirmed'),
-                        'antecedent': term_data.get('antecedent', 'current')
-                    }
-                    final_validated.append(entity)
             
             semantic_time = time.time() - semantic_start
             print(f"🎯 Après validation sémantique : {len(final_validated)}/{len(unique_terms)} termes conservés (⏱️ {semantic_time:.2f}s)")
