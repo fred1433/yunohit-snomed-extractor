@@ -544,16 +544,17 @@ def main():
             
             # Exemples de notes médicales prédéfinies
             exemples_notes = {
-                "Exemple 1 - Pédiatrie": """Enfant Léo Martin, 8 ans. Consulte pour une éruption cutanée prurigineuse évoluant depuis 48h sur les membres et le tronc.
+                "Exemple 1 - Pédiatrie": """Enfant Léo Martin, 8 ans. Consulte pour une éruption cutanée prurigineuse évoluant depuis 48h sur les bras et la peau.
 Pas d'antécédents notables. Vaccins à jour. Notion de cas similaire à l'école.
-Examen : Lésions vésiculeuses typiques.
+Examen : Fièvre légère à 38°C.
 Diagnostic : Varicelle.
-Traitement : Antihistaminique oral et soins locaux. Éviction scolaire recommandée.""",
+Traitement : Antihistaminique et repos recommandé.""",
 
-                "Exemple 2 - Médecine du sport": """Mme. Leclerc, 35 ans, vient pour un certificat médical d'aptitude au sport.
-Se plaint de lombalgies occasionnelles après un effort prolongé. Négation de traumatisme récent.
-Antécédents familiaux : RAS.
-Examen clinique sans particularité. TA : 120/80 mmHg. Vaccinations à jour.
+                "Exemple 2 - Médecine du sport": """Mme. Leclerc, 35 ans, vient pour une consultation médicale sportive.
+Se plaint de lombalgies occasionnelles et de fatigue après un effort prolongé. Négation de traumatisme récent.
+Antécédents familiaux : RAS. Vaccination antitétanique à jour.
+Examen clinique : tension artérielle normale. Auscultation pulmonaire normale.
+Palpation de la région lombaire : sans particularité.
 Apte à la pratique sportive.""",
 
                 "Exemple 3 - Cardiologie": """Patient : M. Dupont, 65 ans.
@@ -776,6 +777,7 @@ Plan : Hospitalisation pour bilan cardiologique complet, incluant une coronarogr
                                     description=f"Constatation clinique : {entity['term']}",
                                     context="Extrait par méthode ULTIME V2",
                                     snomed_code=entity['snomed_code'],
+                                    snomed_term_fr=entity.get('snomed_term', entity['term']),
                                     negation=entity.get('negation', 'positive'),
                                     family=entity.get('family', 'patient'),
                                     suspicion=entity.get('suspicion', 'confirmed'),
@@ -788,6 +790,7 @@ Plan : Hospitalisation pour bilan cardiologique complet, incluant une coronarogr
                                     description=f"Procédure médicale : {entity['term']}",
                                     context="Extrait par méthode ULTIME V2",
                                     snomed_code=entity['snomed_code'],
+                                    snomed_term_fr=entity.get('snomed_term', entity['term']),
                                     negation=entity.get('negation', 'positive'),
                                     family=entity.get('family', 'patient'),
                                     suspicion=entity.get('suspicion', 'confirmed'),
@@ -800,6 +803,7 @@ Plan : Hospitalisation pour bilan cardiologique complet, incluant une coronarogr
                                     description=f"Structure corporelle : {entity['term']}",
                                     context="Extrait par méthode ULTIME V2",
                                     snomed_code=entity['snomed_code'],
+                                    snomed_term_fr=entity.get('snomed_term', entity['term']),
                                     negation=entity.get('negation', 'positive'),
                                     family=entity.get('family', 'patient'),
                                     suspicion=entity.get('suspicion', 'confirmed'),
@@ -880,12 +884,15 @@ Plan : Hospitalisation pour bilan cardiologique complet, incluant une coronarogr
                                 # Vérifier si le code est valide
                                 is_valid = validator.validate_code(item.snomed_code)
                                 if is_valid:
-                                    official_term = validator.get_french_term(item.snomed_code)
-                                    if official_term:
+                                    # CORRECTION : Utiliser item.snomed_term_fr directement
+                                    # au lieu de ré-appeler validator.get_french_term()
+                                    official_term = item.snomed_term_fr if hasattr(item, 'snomed_term_fr') and item.snomed_term_fr else item.term
+                                    
+                                    if official_term: # S'assurer qu'on a bien un terme officiel
                                         valid_results_with_modifiers.append({
                                             "term": item.term,
                                             "gemini_code": item.snomed_code,
-                                            "official_term": official_term,
+                                            "official_term": official_term, # Utiliser le terme officiel corrigé
                                             "negation": translate_modifier_values(getattr(item, 'negation', 'positive')),
                                             "family": translate_modifier_values(getattr(item, 'family', 'patient')),
                                             "suspicion": translate_modifier_values(getattr(item, 'suspicion', 'confirmed')),

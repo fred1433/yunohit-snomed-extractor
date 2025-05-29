@@ -95,7 +95,7 @@ class SNOMEDValidator:
             return False
     
     def _load_french_descriptions(self) -> bool:
-        """Charger les descriptions françaises"""
+        """Charger les descriptions françaises UNIQUEMENT pour les concepts actifs"""
         try:
             # Trouver le fichier de descriptions françaises
             desc_files = list(self.snapshot_path.glob("sct2_Description_Snapshot-fr_*.txt"))
@@ -113,10 +113,13 @@ class SNOMEDValidator:
                         concept_id = row['conceptId']
                         term = row['term']
                         
-                        # Stocker le premier terme trouvé pour chaque concept
-                        # (une version plus sophistiquée utiliserait le Language Refset pour le terme préféré)
-                        if concept_id not in self.french_terms:
-                            self.french_terms[concept_id] = term
+                        # CORRECTION : Ne charger que les termes avec codes ACTIFS
+                        if concept_id in self.valid_concepts:
+                            # Stocker TOUS les termes pour chaque concept actif (pas seulement le premier)
+                            if concept_id not in self.french_terms:
+                                self.french_terms[concept_id] = term  # Terme principal pour get_french_term
+                            
+                            # IMPORTANT : Charger TOUS les termes dans term_to_code
                             self.term_to_code[term.lower().strip()] = concept_id
             
             print(f"✅ {len(self.french_terms)} termes français chargés")
@@ -173,6 +176,40 @@ class SNOMEDValidator:
                 return None
         
         return self.term_to_code.get(term.lower().strip())
+    
+    def find_exact_term_code(self, term: str) -> Optional[str]:
+        """
+        Recherche EXACTE d'un terme dans la base SNOMED CT (priorité maximale)
+        Ne retourne que des codes ACTIFS
+        
+        Args:
+            term: Le terme exact à rechercher
+            
+        Returns:
+            Le code SCTID du premier match exact trouvé ET ACTIF ou None
+        """
+        if not self._loaded:
+            if not self.load_snomed_data():
+                return None
+        
+        # Recherche exacte (case-insensitive) dans notre dictionnaire
+        # term_to_code ne contient désormais que des codes actifs
+        normalized_term = term.lower().strip()
+        return self.term_to_code.get(normalized_term)
+    
+    def find_closest_code(self, term: str) -> Optional[str]:
+        """
+        Méthode de fallback pour recherche approximative si exact match échoue
+        
+        Args:
+            term: Le terme à rechercher
+            
+        Returns:
+            Le code SCTID le plus proche ou None
+        """
+        # Pour l'instant, utilise la même logique que find_code_by_term
+        # Peut être amélioré avec fuzzy matching si nécessaire
+        return self.find_code_by_term(term)
     
     def validate_extraction_result(self, extraction_result) -> Dict:
         """

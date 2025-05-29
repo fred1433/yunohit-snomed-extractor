@@ -599,25 +599,33 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
             for term_data in all_terms:
                 term = term_data['term']
                 
-                # 🎯 CORRECTION : Utiliser d'abord le code donné par Gemini
-                gemini_code = term_data.get('snomed_code', 'UNKNOWN')
+                # 🎯 NOUVELLE LOGIQUE PRIORITAIRE
                 snomed_code = None
                 snomed_term = None
                 
-                # Priorité 1 : Vérifier si le code de Gemini existe dans notre base
-                if gemini_code != 'UNKNOWN' and self.validator.validate_code(gemini_code):
-                    snomed_code = gemini_code
-                    snomed_term = self.validator.get_french_term(gemini_code)
-                    print(f"   ✅ Code Gemini validé : {term} → {gemini_code}")
+                # 🥇 PRIORITÉ 1 : Recherche EXACTE du terme dans la base SNOMED
+                exact_code = self.validator.find_exact_term_code(term)
+                if exact_code:
+                    snomed_code = exact_code
+                    snomed_term = term 
+                    print(f"   🎯 Terme EXACT trouvé : {term} → {exact_code} (UTILISE LE TERME EXACT : '{snomed_term}')")
                 else:
-                    # Priorité 2 : Fallback - chercher nous-mêmes un code pour ce terme
-                    fallback_code = self.validator.find_code_by_term(term)
-                    if fallback_code and self.validator.validate_code(fallback_code):
-                        snomed_code = fallback_code
-                        snomed_term = self.validator.get_french_term(fallback_code)
-                        print(f"   🔍 Code trouvé par recherche : {term} → {fallback_code}")
+                    # 🥈 PRIORITÉ 2 : Vérifier si le code de Gemini existe dans notre base
+                    gemini_code = term_data.get('snomed_code', 'UNKNOWN')
+                    if gemini_code != 'UNKNOWN' and self.validator.validate_code(gemini_code):
+                        snomed_code = gemini_code
+                        snomed_term = self.validator.get_french_term(gemini_code)
+                        print(f"   ✅ Code Gemini validé : {term} → {gemini_code} ('{snomed_term}')")
+                    else:
+                        # 🥉 PRIORITÉ 3 : Fallback - chercher nous-mêmes
+                        snomed_code = self.validator.find_closest_code(term)
+                        if snomed_code:
+                            snomed_term = self.validator.get_french_term(snomed_code)
+                            print(f"   🔍 Code trouvé par recherche : {term} → {snomed_code}")
+                        else:
+                            print(f"   ❌ Aucun code valide trouvé pour : {term} (Gemini: {gemini_code})")
+                            continue
                 
-                # Si on a trouvé un code valide (Gemini ou recherche)
                 if snomed_code and snomed_term:
                     validated.append({
                         'term': term,
@@ -719,10 +727,17 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
                         semantic_result = validation_results[pair_key]
                         if semantic_result['valid']:
                             print(f"   ✅ Conservé : {original_term} → {snomed_term}")
+                            current_snomed_term = snomed_term
+                            # VÉRIFICATION FINALE : Si le terme original est une correspondance exacte pour ce code,
+                            # s'assurer que le snomed_term EST le terme original.
+                            # Ceci est redondant si le flux de données est parfait, mais sert de garde-fou.
+                            if self.validator.find_exact_term_code(original_term) == term_data['snomed_code']:
+                                current_snomed_term = original_term
+                                print(f"   🛡️ GARDE-FOU (Phase 5) : Pour {original_term} ({term_data['snomed_code']}), snomed_term forcé à '{current_snomed_term}'")
                             entity = {
                                 'term': term_data['term'],
                                 'snomed_code': term_data['snomed_code'],
-                                'snomed_term': term_data['snomed_term'],
+                                'snomed_term': current_snomed_term,
                                 'category': self._categorize_by_snomed_code(term_data['snomed_code']),
                                 'negation': term_data.get('negation', 'positive'),
                                 'family': term_data.get('family', 'patient'),
@@ -739,10 +754,17 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
                     else:
                         # Terme identique (pas besoin de validation sémantique) -> conservé automatiquement
                         print(f"   ✅ Identique : {original_term} → {snomed_term}")
+                        current_snomed_term = snomed_term
+                        # VÉRIFICATION FINALE : Si le terme original est une correspondance exacte pour ce code,
+                        # s'assurer que le snomed_term EST le terme original.
+                        # Ceci est redondant si le flux de données est parfait, mais sert de garde-fou.
+                        if self.validator.find_exact_term_code(original_term) == term_data['snomed_code']:
+                            current_snomed_term = original_term
+                            print(f"   🛡️ GARDE-FOU (Phase 5) : Pour {original_term} ({term_data['snomed_code']}), snomed_term forcé à '{current_snomed_term}'")
                         entity = {
                             'term': term_data['term'],
                             'snomed_code': term_data['snomed_code'],
-                            'snomed_term': term_data['snomed_term'],
+                            'snomed_term': current_snomed_term,
                             'category': self._categorize_by_snomed_code(term_data['snomed_code']),
                             'negation': term_data.get('negation', 'positive'),
                             'family': term_data.get('family', 'patient'),
@@ -752,6 +774,43 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
                         final_validated.append(entity)
             
             semantic_time = time.time() - semantic_start
+            
+            # === DÉDUPLICATION FINALE PAR TERME ORIGINAL ===
+            # Si même terme original avec codes différents → garder le plus proche sémantiquement
+            print(f"🔄 Déduplication finale par terme original...")
+            final_deduplicated = []
+            seen_terms = {}
+            
+            for entity in final_validated:
+                original_term = entity['term'].lower()
+                snomed_term = entity['snomed_term'].lower()
+                
+                if original_term not in seen_terms:
+                    # Premier terme de ce type
+                    seen_terms[original_term] = entity
+                    final_deduplicated.append(entity)
+                else:
+                    # Doublon détecté - choisir le meilleur
+                    existing_entity = seen_terms[original_term]
+                    existing_snomed = existing_entity['snomed_term'].lower()
+                    
+                    # Priorité : terme identique > terme différent
+                    if original_term == snomed_term and original_term != existing_snomed:
+                        # Le nouveau est identique, l'ancien non → remplacer
+                        print(f"   🔄 Remplacement: '{entity['term']}' → '{entity['snomed_term']}' (identique) au lieu de → '{existing_entity['snomed_term']}'")
+                        final_deduplicated.remove(existing_entity)
+                        final_deduplicated.append(entity)
+                        seen_terms[original_term] = entity
+                    elif original_term == existing_snomed and original_term != snomed_term:
+                        # L'ancien est identique, le nouveau non → garder l'ancien
+                        print(f"   ✅ Conservé: '{existing_entity['term']}' → '{existing_entity['snomed_term']}' (identique) au lieu de → '{entity['snomed_term']}'")
+                    else:
+                        # Cas ambigus → garder le premier
+                        print(f"   ⚠️  Doublon gardé premier: '{existing_entity['term']}' → '{existing_entity['snomed_term']}' vs → '{entity['snomed_term']}'")
+            
+            final_validated = final_deduplicated
+            print(f"✨ Après déduplication finale : {len(final_validated)} termes uniques")
+            
             print(f"🎯 Après validation sémantique : {len(final_validated)}/{len(unique_terms)} termes conservés (⏱️ {semantic_time:.2f}s)")
             
             if rejected_terms:
@@ -772,10 +831,17 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
             # Détection automatique de catégorie basée sur le code SNOMED
             category = self._categorize_by_snomed_code(term_data['snomed_code'])
             
+            current_snomed_term = term_data['snomed_term']
+            # VÉRIFICATION FINALE : Si le terme original est une correspondance exacte pour ce code,
+            # s'assurer que le snomed_term EST le terme original.
+            if self.validator.find_exact_term_code(term_data['term']) == term_data['snomed_code']:
+                current_snomed_term = term_data['term']
+                print(f"   🛡️ GARDE-FOU (Phase 5) : Pour {term_data['term']} ({term_data['snomed_code']}), snomed_term forcé à '{current_snomed_term}'")
+
             entity = {
                 'term': term_data['term'],
                 'snomed_code': term_data['snomed_code'],
-                'snomed_term': term_data['snomed_term'],
+                'snomed_term': current_snomed_term,
                 'category': category,
                 'negation': term_data.get('negation', 'positive'),
                 'family': term_data.get('family', 'patient'),
@@ -896,17 +962,15 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
 Réponds EXACTEMENT par ce format JSON :
 {{
     "validations": [
-        {{"paire": 1, "synonymes": true/false, "confiance": 0.0-1.0, "explication": "courte explication"}},
-        {{"paire": 2, "synonymes": true/false, "confiance": 0.0-1.0, "explication": "courte explication"}},
+        {{"paire": 1, "meme_concept": true}},
+        {{"paire": 2, "meme_concept": false}},
         etc.
     ]
 }}
 
 Règles :
-- true = synonymes médicaux ou même concept clinique
-- false = concepts différents
-- confiance entre 0.0 et 1.0
-- explication courte et claire"""
+- true = même concept clinique (identique ou équivalent)
+- false = concepts cliniques différents"""
 
             try:
                 start_time = time.time()
@@ -930,21 +994,34 @@ Règles :
                         validations = result.get("validations", [])
                         
                         for validation in validations:
-                            pair_num = validation.get("paire", 0) - 1  # Convertir en index 0-based
-                            if 0 <= pair_num < len(llm_pairs):
-                                batch_results[pair_num] = {
-                                    "valid": validation.get("synonymes", False),
-                                    "confidence": validation.get("confiance", 0.5),
-                                    "reason": validation.get("explication", "Analyse LLM"),
-                                    "duration": llm_duration / len(llm_pairs)
-                                }
+                            paire_num = validation.get('paire')
+                            meme_concept = validation.get('meme_concept')
+                            
+                            if paire_num is not None and meme_concept is not None:
+                                paire_idx = paire_num - 1
+                                if 0 <= paire_idx < len(llm_pairs):
+                                    pair_dict = llm_pairs[paire_idx]
+                                    if meme_concept:
+                                        batch_results[paire_idx] = {
+                                            "valid": True,
+                                            "confidence": 1.0,
+                                            "reason": "Concept identique",
+                                            "duration": llm_duration / len(llm_pairs)
+                                        }
+                                    else:
+                                        batch_results[paire_idx] = {
+                                            "valid": False,
+                                            "confidence": 0.0,
+                                            "reason": "Concept différent",
+                                            "duration": llm_duration / len(llm_pairs)
+                                        }
                         
                         # Compléter les paires manquantes
                         for i in range(len(llm_pairs)):
                             if i not in batch_results:
                                 batch_results[i] = {
                                     "valid": False,
-                                    "confidence": 0.5,
+                                    "confidence": 0.0,
                                     "reason": "Paire non trouvée dans la réponse",
                                     "duration": llm_duration / len(llm_pairs)
                                 }
@@ -952,11 +1029,11 @@ Règles :
                         return batch_results
                     else:
                         # Fallback en cas d'échec de parsing
-                        return {i: {"valid": False, "confidence": 0.3, "reason": "Échec parsing JSON", "duration": llm_duration / len(llm_pairs)} for i in range(len(llm_pairs))}
+                        return {i: {"valid": False, "confidence": 0.0, "reason": "Échec parsing JSON", "duration": llm_duration / len(llm_pairs)} for i in range(len(llm_pairs))}
                         
                 except json.JSONDecodeError as e:
                     # Fallback simple en cas d'erreur JSON
-                    return {i: {"valid": False, "confidence": 0.3, "reason": f"Erreur JSON: {str(e)}", "duration": llm_duration / len(llm_pairs)} for i in range(len(llm_pairs))}
+                    return {i: {"valid": False, "confidence": 0.0, "reason": f"Erreur JSON: {str(e)}", "duration": llm_duration / len(llm_pairs)} for i in range(len(llm_pairs))}
                     
             except Exception as e:
                 return {i: {"valid": False, "reason": f"Erreur LLM: {str(e)}", "confidence": 0.0, "duration": 0} for i in range(len(llm_pairs))}
@@ -1023,7 +1100,7 @@ Règles :
                     result = math_results[original_idx]
                     
                     result['valid'] = llm_result.get('valid', False)
-                    result['confidence'] = llm_result.get('confidence', 0.5)
+                    result['confidence'] = llm_result.get('confidence', 0.0)
                     result['reason'] = llm_result.get('reason', 'Analyse LLM')
                     
                     status = "✅" if result['valid'] else "❌"
