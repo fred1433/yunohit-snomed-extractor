@@ -5,6 +5,9 @@ from typing import Dict, Any
 from config import Config
 from models import MedicalNote, SNOMEDExtraction, ClinicalFinding, Procedure, BodyStructure
 from api_security import security_manager
+import asyncio
+import time
+from snomed_validator import SNOMEDValidator
 
 class SNOMEDExtractor:
     """Extracteur d'informations SNOMED CT à partir de notes médicales"""
@@ -235,7 +238,7 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
             clinical_findings=[],
             procedures=[],
             body_structures=[]
-        )
+        ) 
     
     def extract_triple_parallel(self, medical_note: MedicalNote) -> SNOMEDExtraction:
         """Extraction avec 3 appels parallèles pour améliorer la robustesse"""
@@ -373,7 +376,6 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
             print("🎯 EXTRACTION TRIPLE + VALIDATION + FUSION commencée...")
             
             # Charger le validateur une seule fois pour toutes les validations
-            from snomed_validator import SNOMEDValidator
             validator = SNOMEDValidator()
             print("✅ Validateur SNOMED CT chargé")
             
@@ -479,4 +481,652 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
             print(f"❌ Erreur extraction triple + fusion : {e}")
             import traceback
             traceback.print_exc()
-            return self._create_empty_extraction(medical_note) 
+            return self._create_empty_extraction(medical_note)
+    
+    async def extract_triple_with_validation_fusion_v2(self, text, use_context_modifiers=True):
+        """
+        MÉTHODE ULTIME V2 : Triple extraction parallèle + validation SNOMED + validation sémantique finale
+        
+        Processus optimisé :
+        1. 3 extractions Gemini Pro EN PARALLÈLE (chronométrées)
+        2. Validation SNOMED de chaque extraction (chronométrée)  
+        3. Fusion + déduplication par code SNOMED (chronométrée)
+        4. Validation sémantique hybride SUR LE TABLEAU FINAL SEULEMENT (chronométrée)
+        
+        Returns:
+            dict: Résultats finaux avec statistiques détaillées et temps
+        """
+        print("🎯 EXTRACTION ULTIME V2 : Triple extraction parallèle + validation SNOMED + validation sémantique finale")
+        start_time = time.time()
+        
+        # Vérifications préliminaires
+        if not self._security_check():
+            return {"error": "Limites de sécurité dépassées"}
+        
+        # Initialiser le validator SNOMED
+        if not hasattr(self, 'validator') or self.validator is None:
+            print("✅ Validateur SNOMED CT chargé")
+            self.validator = SNOMEDValidator()
+        
+        # === PHASE 1 : TRIPLE EXTRACTION PARALLÈLE ===
+        parallel_start = time.time()
+        print("🚀 Début des 3 extractions en parallèle...")
+        
+        async def extract_single(extraction_num):
+            """Extraction individuelle avec chronométrage"""
+            extraction_start = time.time()
+            print(f"🔄 === EXTRACTION {extraction_num}/3 ===")
+            
+            # CORRECTION : Utiliser asyncio.to_thread pour vraie parallélisation
+            entities = await asyncio.to_thread(
+                self.extract_medical_entities, 
+                text, 
+                use_context_modifiers
+            )
+            
+            extraction_time = time.time() - extraction_start
+            print(f"✅ Extraction {extraction_num} terminée en ⏱️ {extraction_time:.2f}s")
+            return entities, extraction_time
+        
+        # Exécution des 3 extractions en parallèle  
+        results = await asyncio.gather(
+            extract_single(1),
+            extract_single(2), 
+            extract_single(3)
+        )
+        
+        parallel_time = time.time() - parallel_start
+        individual_times = [result[1] for result in results]
+        print(f"🎯 3 extractions parallèles terminées en ⏱️ {parallel_time:.2f}s (vs {sum(individual_times):.2f}s séquentiel = Gain: {sum(individual_times) - parallel_time:.2f}s)")
+        
+        # === PHASE 2 : VALIDATION SNOMED AVEC CHRONOMÉTRAGE ===
+        validation_phase_start = time.time()
+        print(f"\n🔍 === VALIDATION SNOMED (3 extractions) ===")
+        
+        all_validated_terms = []
+        extraction_stats = []
+        
+        for i, (entities_result, _) in enumerate(results):
+            extraction_num = i + 1
+            all_terms = []
+            
+            # Correction : accès correct à la structure des données
+            if entities_result and 'entities' in entities_result:
+                entities = entities_result['entities']
+                
+                # Collecte des termes avec structure corrigée ET modifieurs contextuels
+                for finding in entities.get('findings', []):
+                    all_terms.append({
+                        'term': finding['term'],
+                        'snomed_code': finding.get('snomed_code', 'UNKNOWN'),
+                        'category': finding.get('category', 'clinical_finding'),
+                        'negation': finding.get('negation', 'positive'),
+                        'family': finding.get('family', 'patient'),
+                        'suspicion': finding.get('suspicion', 'confirmed'),
+                        'antecedent': finding.get('antecedent', 'current')
+                    })
+                for procedure in entities.get('procedures', []):
+                    all_terms.append({
+                        'term': procedure['term'],
+                        'snomed_code': procedure.get('snomed_code', 'UNKNOWN'),
+                        'category': procedure.get('category', 'procedure'),
+                        'negation': procedure.get('negation', 'positive'),
+                        'family': procedure.get('family', 'patient'),
+                        'suspicion': procedure.get('suspicion', 'confirmed'),
+                        'antecedent': procedure.get('antecedent', 'current')
+                    })
+                for structure in entities.get('body_structures', []):
+                    all_terms.append({
+                        'term': structure['term'],
+                        'snomed_code': structure.get('snomed_code', 'UNKNOWN'),
+                        'category': structure.get('category', 'body_structure'),
+                        'negation': structure.get('negation', 'positive'),
+                        'family': structure.get('family', 'patient'),
+                        'suspicion': structure.get('suspicion', 'confirmed'),
+                        'antecedent': structure.get('antecedent', 'current')
+                    })
+                
+                print(f"📊 Extraction {extraction_num} : {len(all_terms)} termes extraits")
+            else:
+                print(f"❌ Extraction {extraction_num} : pas de données")
+                continue
+            
+            # Validation SNOMED avec chronométrage ET préservation des modifieurs
+            validation_start = time.time()
+            validated = []
+            valid_count = 0
+            
+            for term_data in all_terms:
+                term = term_data['term']
+                # D'abord essayer de trouver un code pour ce terme
+                snomed_code = self.validator.find_code_by_term(term)
+                if snomed_code:
+                    # Vérifier que le code est valide
+                    if self.validator.validate_code(snomed_code):
+                        snomed_term = self.validator.get_french_term(snomed_code)
+                        if snomed_term:
+                            validated.append({
+                                'term': term,
+                                'snomed_code': snomed_code,
+                                'snomed_term': snomed_term,
+                                'valid': True,
+                                # Préserver les modifieurs contextuels
+                                'negation': term_data.get('negation', 'positive'),
+                                'family': term_data.get('family', 'patient'),
+                                'suspicion': term_data.get('suspicion', 'confirmed'),
+                                'antecedent': term_data.get('antecedent', 'current'),
+                                'category': term_data.get('category', 'clinical_finding')
+                            })
+                            valid_count += 1
+            
+            validation_time = time.time() - validation_start
+            print(f"✅ Validation SNOMED {extraction_num} : {valid_count}/{len(all_terms)} termes validés (⏱️ {validation_time:.2f}s)")
+            
+            # Collecte des termes validés
+            for term_data in validated:
+                if term_data['valid']:
+                    all_validated_terms.append(term_data)
+            
+            extraction_stats.append((extraction_num, valid_count, len(all_terms)))
+        
+        # === PHASE 3 : FUSION ET DÉDUPLICATION ===
+        fusion_start = time.time()
+        print(f"\n🔄 === FUSION ET DÉDUPLICATION ===")
+        print(f"Total avant déduplication : {len(all_validated_terms)} termes validés SNOMED")
+        
+        unique_terms = {}
+        for term_data in all_validated_terms:
+            code = term_data['snomed_code']
+            if code not in unique_terms:
+                print(f"   ➕ {term_data['term']} ({code})")
+                unique_terms[code] = term_data
+            else:
+                print(f"   🔄 Doublon ignoré : {term_data['term']} ({code})")
+        
+        fusion_time = time.time() - fusion_start
+        print(f"✨ Après déduplication : {len(unique_terms)} termes uniques validés SNOMED (⏱️ {fusion_time:.2f}s)")
+        
+        # === PHASE 4 : VALIDATION SÉMANTIQUE SUR LE TABLEAU FINAL ===
+        semantic_start = time.time()
+        print(f"\n🧠 === VALIDATION SÉMANTIQUE HYBRIDE ===")
+        
+        # Préparation des paires pour validation sémantique
+        semantic_pairs = []
+        for term_data in unique_terms.values():
+            original_term = term_data['term']
+            snomed_term = term_data['snomed_term']
+            if original_term.lower() != snomed_term.lower():
+                semantic_pairs.append((original_term, snomed_term, term_data['snomed_code']))
+        
+        if not semantic_pairs:
+            print("✅ Aucune validation sémantique nécessaire (termes identiques)")
+            final_validated = list(unique_terms.values())
+            semantic_time = time.time() - semantic_start
+        else:
+            print(f"🔍 Validation sémantique hybride : {len(semantic_pairs)} paires à analyser")
+            
+            # Validation sémantique hybride
+            semantic_results = await self._validate_semantic_coherence_batch(semantic_pairs)
+            
+            # Application des résultats
+            final_validated = []
+            rejected_terms = []
+            
+            # Créer un dictionnaire pour recherche rapide
+            semantic_lookup = {}
+            for result in semantic_results:
+                key = (result['original_term'], result['snomed_term'])
+                semantic_lookup[key] = result
+            
+            for term_data in unique_terms.values():
+                original_term = term_data['term']
+                snomed_term = term_data['snomed_term']
+                key = (original_term, snomed_term)
+                
+                if key in semantic_lookup:
+                    semantic_result = semantic_lookup[key]
+                    if semantic_result['valid']:
+                        print(f"   ✅ Conservé : {original_term} → {snomed_term}")
+                        entity = {
+                            'term': term_data['term'],
+                            'snomed_code': term_data['snomed_code'],
+                            'snomed_term': term_data['snomed_term'],
+                            'category': self._categorize_by_snomed_code(term_data['snomed_code']),
+                            'negation': term_data.get('negation', 'positive'),
+                            'family': term_data.get('family', 'patient'),
+                            'suspicion': term_data.get('suspicion', 'confirmed'),
+                            'antecedent': term_data.get('antecedent', 'current')
+                        }
+                        final_validated.append(entity)
+                    else:
+                        print(f"   ❌ Rejeté : {original_term} → {snomed_term} ({semantic_result['explanation']})")
+                        rejected_terms.append({
+                            'term': original_term,
+                            'reason': semantic_result['explanation']
+                        })
+                else:
+                    # Terme identique, conservé automatiquement
+                    entity = {
+                        'term': term_data['term'],
+                        'snomed_code': term_data['snomed_code'],
+                        'snomed_term': term_data['snomed_term'],
+                        'category': self._categorize_by_snomed_code(term_data['snomed_code']),
+                        'negation': term_data.get('negation', 'positive'),
+                        'family': term_data.get('family', 'patient'),
+                        'suspicion': term_data.get('suspicion', 'confirmed'),
+                        'antecedent': term_data.get('antecedent', 'current')
+                    }
+                    final_validated.append(entity)
+            
+            semantic_time = time.time() - semantic_start
+            print(f"🎯 Après validation sémantique : {len(final_validated)}/{len(unique_terms)} termes conservés (⏱️ {semantic_time:.2f}s)")
+            
+            if rejected_terms:
+                print(f"🗑️ Rejetés pour incohérence sémantique : {len(rejected_terms)}")
+                for rejected in rejected_terms:
+                    print(f"   • {rejected['term']} : {rejected['reason']}")
+        
+        total_validation_time = time.time() - validation_phase_start
+        print(f"✅ Phase validation complète terminée en ⏱️ {total_validation_time:.2f}s")
+        
+        # === PHASE 5 : RÉSULTATS FINAUX ===
+        # Catégorisation des résultats finaux
+        final_findings = []
+        final_procedures = []
+        final_body_structures = []
+        
+        for term_data in final_validated:
+            # Détection automatique de catégorie basée sur le code SNOMED
+            category = self._categorize_by_snomed_code(term_data['snomed_code'])
+            
+            entity = {
+                'term': term_data['term'],
+                'snomed_code': term_data['snomed_code'],
+                'snomed_term': term_data['snomed_term'],
+                'category': category,
+                'negation': term_data.get('negation', 'positive'),
+                'family': term_data.get('family', 'patient'),
+                'suspicion': term_data.get('suspicion', 'confirmed'),
+                'antecedent': term_data.get('antecedent', 'current')
+            }
+            
+            if 'finding' in category.lower() or 'disorder' in category.lower():
+                final_findings.append(entity)
+            elif 'procedure' in category.lower():
+                final_procedures.append(entity)
+            else:
+                final_body_structures.append(entity)
+        
+        # Calcul des statistiques de performance
+        max_individual = max([stats[1] for stats in extraction_stats]) if extraction_stats else 0
+        fusion_gain = len(unique_terms) - max_individual
+        semantic_filtered = len(unique_terms) - len(final_validated)
+        total_time = time.time() - start_time
+        
+        # Résultat final avec temps détaillés
+        result = {
+            'entities': {
+                'findings': final_findings,
+                'procedures': final_procedures,
+                'body_structures': final_body_structures
+            },
+            'statistics': {
+                'extractions': extraction_stats,
+                'before_fusion': max_individual,
+                'after_fusion': len(unique_terms),
+                'after_semantic': len(final_validated),
+                'fusion_gain': fusion_gain,
+                'semantic_filtered': semantic_filtered,
+                'times': {
+                    'parallel_extractions': parallel_time,
+                    'individual_times': individual_times,
+                    'sequential_equivalent': sum(individual_times),
+                    'parallel_gain': sum(individual_times) - parallel_time,
+                    'validation_phase': total_validation_time,
+                    'fusion': fusion_time,
+                    'semantic_validation': semantic_time,
+                    'total': total_time
+                }
+            }
+        }
+        
+        # Affichage des résultats avec temps détaillés
+        print(f"\n🎯 RÉSULTAT FINAL DE LA FUSION V2 :")
+        print(f"   🔍 {len(final_findings)} constatations cliniques")
+        print(f"   ⚕️  {len(final_procedures)} procédures/traitements")
+        print(f"   🫀 {len(final_body_structures)} structures corporelles")
+        print(f"   📊 TOTAL : {len(final_validated)} entités validées")
+        
+        print(f"\n📈 STATISTIQUES PAR EXTRACTION :")
+        for extraction_num, valid_count, total_count in extraction_stats:
+            percentage = (valid_count/total_count*100) if total_count > 0 else 0
+            print(f"   Extraction {extraction_num} : {valid_count}/{total_count} ({percentage:.1f}%)")
+        
+        print(f"\n🚀 PERFORMANCE DE LA FUSION V2 :")
+        print(f"   📊 Avant fusion : max {max_individual} entités validées")
+        print(f"   ✨ Après fusion SNOMED : {len(unique_terms)} entités uniques")
+        print(f"   🧠 Après validation sémantique : {len(final_validated)} entités cohérentes")
+        print(f"   📈 GAIN fusion : +{fusion_gain} entités supplémentaires")
+        print(f"   🛡️ FILTRAGE sémantique : -{semantic_filtered} incohérences éliminées")
+        
+        print(f"\n⏱️ CHRONOMÉTRAGE DÉTAILLÉ :")
+        print(f"   🚀 Extractions parallèles : {parallel_time:.2f}s")
+        print(f"   🔄 Équivalent séquentiel : {sum(individual_times):.2f}s")
+        print(f"   💨 Gain parallélisme : -{sum(individual_times) - parallel_time:.2f}s")
+        print(f"   🔍 Phase validation : {total_validation_time:.2f}s")
+        print(f"   🧠 Validation sémantique : {semantic_time:.2f}s")
+        print(f"   🎯 TEMPS TOTAL : {total_time:.2f}s")
+        
+        return result
+    
+    async def _validate_semantic_coherence_batch(self, term_pairs: list) -> dict:
+        """
+        Validation sémantique hybride groupée des correspondances SNOMED CT
+        Combine filtrage mathématique rapide + LLM Gemini Flash pour les cas ambigus
+        """
+        from difflib import SequenceMatcher
+        import time
+        
+        def calculate_math_score(gemini_term: str, official_term: str) -> float:
+            """Score mathématique rapide combinant plusieurs métriques"""
+            
+            # 1. Similarité Levenshtein
+            levenshtein = SequenceMatcher(None, gemini_term.lower(), official_term.lower()).ratio()
+            
+            # 2. Mots en commun
+            words_a = set(gemini_term.lower().split())
+            words_b = set(official_term.lower().split())
+            word_overlap = len(words_a.intersection(words_b)) / max(len(words_a), len(words_b)) if words_a or words_b else 0
+            
+            # 3. Contenance (un terme contient l'autre)
+            a_clean = gemini_term.lower().strip()
+            b_clean = official_term.lower().strip()
+            contains = 1.0 if (a_clean in b_clean or b_clean in a_clean) else 0.0
+            
+            # Score global pondéré
+            return (levenshtein * 0.3 + word_overlap * 0.4 + contains * 0.3)
+        
+        def llm_validate_batch(llm_pairs: list) -> dict:
+            """Validation LLM groupée pour les cas ambigus"""
+            if not llm_pairs:
+                return {}
+            
+            # Construire le prompt groupé
+            pairs_text = ""
+            for i, (gemini_term, official_term) in enumerate(llm_pairs):
+                pairs_text += f'{i+1}. "{gemini_term}" ↔ "{official_term}"\n'
+            
+            prompt = f"""Tu es un expert médical. Analyse si chaque paire de termes médicaux désigne le MÊME concept clinique :
+
+{pairs_text}
+
+Réponds EXACTEMENT par ce format JSON :
+{{
+    "validations": [
+        {{"paire": 1, "synonymes": true/false, "confiance": 0.0-1.0, "explication": "courte explication"}},
+        {{"paire": 2, "synonymes": true/false, "confiance": 0.0-1.0, "explication": "courte explication"}},
+        etc.
+    ]
+}}
+
+Règles :
+- true = synonymes médicaux ou même concept clinique
+- false = concepts différents
+- confiance entre 0.0 et 1.0
+- explication courte et claire"""
+
+            try:
+                start_time = time.time()
+                response = self.model.generate_content(prompt)
+                llm_duration = time.time() - start_time
+                
+                response_text = response.text.strip()
+                
+                # Parser la réponse JSON groupée
+                import json
+                try:
+                    # Extraire le JSON de la réponse
+                    json_start = response_text.find('{')
+                    json_end = response_text.rfind('}') + 1
+                    if json_start >= 0 and json_end > json_start:
+                        json_str = response_text[json_start:json_end]
+                        result = json.loads(json_str)
+                        
+                        # Convertir en dictionnaire indexé
+                        batch_results = {}
+                        validations = result.get("validations", [])
+                        
+                        for validation in validations:
+                            pair_num = validation.get("paire", 0) - 1  # Convertir en index 0-based
+                            if 0 <= pair_num < len(llm_pairs):
+                                batch_results[pair_num] = {
+                                    "valid": validation.get("synonymes", False),
+                                    "confidence": validation.get("confiance", 0.5),
+                                    "reason": validation.get("explication", "Analyse LLM"),
+                                    "duration": llm_duration / len(llm_pairs)
+                                }
+                        
+                        # Compléter les paires manquantes
+                        for i in range(len(llm_pairs)):
+                            if i not in batch_results:
+                                batch_results[i] = {
+                                    "valid": False,
+                                    "confidence": 0.5,
+                                    "reason": "Paire non trouvée dans la réponse",
+                                    "duration": llm_duration / len(llm_pairs)
+                                }
+                        
+                        return batch_results
+                    else:
+                        # Fallback en cas d'échec de parsing
+                        return {i: {"valid": False, "confidence": 0.3, "reason": "Échec parsing JSON", "duration": llm_duration / len(llm_pairs)} for i in range(len(llm_pairs))}
+                        
+                except json.JSONDecodeError as e:
+                    # Fallback simple en cas d'erreur JSON
+                    return {i: {"valid": False, "confidence": 0.3, "reason": f"Erreur JSON: {str(e)}", "duration": llm_duration / len(llm_pairs)} for i in range(len(llm_pairs))}
+                    
+            except Exception as e:
+                return {i: {"valid": False, "reason": f"Erreur LLM: {str(e)}", "confidence": 0.0, "duration": 0} for i in range(len(llm_pairs))}
+        
+        if not term_pairs:
+            return {}
+        
+        # Phase 1 : Tri mathématique rapide
+        math_results = []
+        llm_cases = []
+        llm_indices = []
+        
+        print(f"🔍 Validation sémantique hybride : {len(term_pairs)} paires à analyser")
+        
+        for i, (gemini_term, official_term) in enumerate(term_pairs):
+            math_score = calculate_math_score(gemini_term, official_term)
+            
+            if math_score >= 0.5:
+                # Cas évident : ACCEPTER directement
+                result = {
+                    'valid': True,
+                    'confidence': math_score,
+                    'method': 'mathematical',
+                    'reason': f"Score math élevé ({math_score:.3f})"
+                }
+                print(f"   ✅ Math: '{gemini_term}' → '{official_term}' (score: {math_score:.3f})")
+            elif math_score <= 0.01:
+                # Cas très évident : REJETER directement
+                result = {
+                    'valid': False,
+                    'confidence': math_score,
+                    'method': 'mathematical', 
+                    'reason': f"Score math très bas ({math_score:.3f})"
+                }
+                print(f"   ❌ Math: '{gemini_term}' → '{official_term}' (score: {math_score:.3f})")
+            else:
+                # Cas ambigu : pour LLM
+                result = {
+                    'valid': False,  # Sera mis à jour après LLM
+                    'confidence': 0.0,  # Sera mis à jour après LLM
+                    'method': 'hybrid',
+                    'reason': f"Score math ambigu ({math_score:.3f}) → LLM"
+                }
+                llm_cases.append((gemini_term, official_term))
+                llm_indices.append(i)
+                print(f"   🤖 LLM: '{gemini_term}' → '{official_term}' (score: {math_score:.3f})")
+            
+            math_results.append(result)
+        
+        # Phase 2 : Validation LLM groupée
+        if llm_cases:
+            print(f"🤖 Validation LLM groupée : {len(llm_cases)} paires ambiguës")
+            
+            start_llm = time.time()
+            llm_batch_results = llm_validate_batch(llm_cases)
+            total_llm_time = time.time() - start_llm
+            
+            print(f"✅ LLM groupé terminé en {total_llm_time:.2f}s")
+            
+            # Mettre à jour les résultats avec les validations LLM
+            for batch_idx, original_idx in enumerate(llm_indices):
+                if batch_idx in llm_batch_results:
+                    llm_result = llm_batch_results[batch_idx]
+                    result = math_results[original_idx]
+                    
+                    result['valid'] = llm_result.get('valid', False)
+                    result['confidence'] = llm_result.get('confidence', 0.5)
+                    result['reason'] = llm_result.get('reason', 'Analyse LLM')
+                    
+                    status = "✅" if result['valid'] else "❌"
+                    gemini_term, official_term = llm_cases[batch_idx]
+                    print(f"   {status} LLM: '{gemini_term}' → '{official_term}' (confiance: {result['confidence']:.2f})")
+                    print(f"      └─ {result['reason']}")
+        
+        # Convertir en dictionnaire indexé pour le retour
+        final_results = {}
+        for i, result in enumerate(math_results):
+            final_results[i] = result
+        
+        # Statistiques
+        valid_count = sum(1 for r in math_results if r['valid'])
+        math_count = sum(1 for r in math_results if r['method'] == 'mathematical')
+        llm_count = len(llm_cases)
+        
+        print(f"📊 Validation terminée : {valid_count}/{len(term_pairs)} validées")
+        print(f"   🔢 Math : {math_count}/{len(term_pairs)} ({math_count/len(term_pairs)*100:.1f}%)")
+        print(f"   🤖 LLM : {llm_count}/{len(term_pairs)} ({llm_count/len(term_pairs)*100:.1f}%)")
+        
+        return final_results 
+
+    def _categorize_by_snomed_code(self, snomed_code):
+        """
+        Catégorise automatiquement une entité basée sur son code SNOMED
+        
+        Args:
+            snomed_code (str): Code SNOMED CT
+            
+        Returns:
+            str: Catégorie déterminée
+        """
+        # Règles de catégorisation basées sur les hiérarchies SNOMED
+        # Ces codes correspondent aux grandes hiérarchies SNOMED CT
+        
+        # Findings/Disorders (domaine clinique)
+        if snomed_code.startswith(('271', '40', '38', '41', '27', '36', '23', '25', '42')):
+            return "Clinical finding"
+        
+        # Procedures (interventions)  
+        elif snomed_code.startswith(('71', '77', '23', '18', '38', '89', '17', '18')):
+            return "Procedure"
+            
+        # Body structures (anatomie)
+        elif snomed_code.startswith(('51', '81', '15', '79', '24', '36', '12', '91')):
+            return "Body structure"
+            
+        # Observable entity (observations)
+        elif snomed_code.startswith(('36', '24', '25')):
+            return "Observable entity"
+            
+        # Substances (médicaments, substances)
+        elif snomed_code.startswith(('44', '37', '39', '41')):
+            return "Substance"
+            
+        # Par défaut, catégoriser comme finding
+        else:
+            return "Clinical finding"
+    
+    def _security_check(self):
+        """Vérification de sécurité des limites API"""
+        can_proceed, message = security_manager.can_make_request()
+        if not can_proceed:
+            print(f"🚫 EXTRACTION BLOQUÉE : {message}")
+            return False
+        return True
+    
+    def extract_medical_entities(self, text, use_context_modifiers=True):
+        """
+        Extraction d'entités médicales à partir de texte brut
+        Compatible avec la méthode V2 asynchrone
+        """
+        try:
+            # Créer un objet MedicalNote temporaire
+            medical_note = MedicalNote(
+                patient_id="TEMP_001",
+                patient_name="Patient Temporaire",
+                date="2025-01-01",
+                doctor="Dr. Extracteur",
+                content=text,
+                specialty="Extraction automatique"
+            )
+            
+            # Utiliser la méthode d'extraction existante
+            extraction = self.extract_snomed_info(medical_note)
+            
+            # Convertir au format attendu par la méthode V2
+            findings = []
+            procedures = []
+            body_structures = []
+            
+            for finding in extraction.clinical_findings:
+                findings.append({
+                    'term': finding.term,
+                    'snomed_code': finding.snomed_code,
+                    'category': 'clinical_finding',
+                    # Récupérer TOUS les modifieurs contextuels
+                    'negation': getattr(finding, 'negation', 'positive'),
+                    'family': getattr(finding, 'family', 'patient'),
+                    'suspicion': getattr(finding, 'suspicion', 'confirmed'),
+                    'antecedent': getattr(finding, 'antecedent', 'current')
+                })
+            
+            for procedure in extraction.procedures:
+                procedures.append({
+                    'term': procedure.term,
+                    'snomed_code': procedure.snomed_code,
+                    'category': 'procedure',
+                    # Récupérer TOUS les modifieurs contextuels
+                    'negation': getattr(procedure, 'negation', 'positive'),
+                    'family': getattr(procedure, 'family', 'patient'),
+                    'suspicion': getattr(procedure, 'suspicion', 'confirmed'),
+                    'antecedent': getattr(procedure, 'antecedent', 'current')
+                })
+            
+            for structure in extraction.body_structures:
+                body_structures.append({
+                    'term': structure.term,
+                    'snomed_code': structure.snomed_code,
+                    'category': 'body_structure',
+                    # Récupérer TOUS les modifieurs contextuels
+                    'negation': getattr(structure, 'negation', 'positive'),
+                    'family': getattr(structure, 'family', 'patient'),
+                    'suspicion': getattr(structure, 'suspicion', 'confirmed'),
+                    'antecedent': getattr(structure, 'antecedent', 'current')
+                })
+            
+            return {
+                'entities': {
+                    'findings': findings,
+                    'procedures': procedures,
+                    'body_structures': body_structures
+                }
+            }
+            
+        except Exception as e:
+            print(f"❌ Erreur extraction_medical_entities: {str(e)}")
+            return None 

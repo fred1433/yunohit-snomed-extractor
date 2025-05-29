@@ -616,11 +616,19 @@ Plan : Hospitalisation pour bilan cardiologique complet, incluant une coronarogr
             if not use_flash_model and not preview_production:
                 fusion_mode = st.checkbox(
                     "🚀 MÉTHODE ULTIME : Fusion de 3 extractions + validation (recommandé)",
-                    value=True,
+                    value=False,
                     help="Combine TOUS les résultats validés de 3 extractions pour maximiser les entités trouvées"
+                )
+                
+                # Nouvelle méthode V2 avec validation sémantique
+                fusion_v2_mode = st.checkbox(
+                    "🧠 MÉTHODE ULTIME V2 : + Validation sémantique hybride (PREMIUM)",
+                    value=True,
+                    help="Version avancée avec filtrage intelligent des incohérences sémantiques via LLM hybride"
                 )
             else:
                 fusion_mode = False
+                fusion_v2_mode = False
             
             # Afficher le warning seulement si pas en mode prévisualisation
             if use_flash_model and not preview_production:
@@ -674,11 +682,11 @@ Plan : Hospitalisation pour bilan cardiologique complet, incluant une coronarogr
                                     text-align: center; 
                                     box-shadow: 0 6px 20px rgba(76, 175, 80, 0.3);
                                     border: 2px solid #4CAF50;">
-                            <h3 style="margin: 0; font-size: 2rem; font-weight: 600;">
-                                🎯 {len(valid_results_with_modifiers)} terme(s) extraits et validés dans la base SNOMED CT française
-                            </h3>
-                        </div>
-                        """, unsafe_allow_html=True)
+                                <h3 style="margin: 0; font-size: 2rem; font-weight: 600;">
+                                    🎯 {len(valid_results_with_modifiers)} terme(s) extraits et validés dans la base SNOMED CT française
+                                </h3>
+                            </div>
+                            """, unsafe_allow_html=True)
                         
                         # Créer un tableau HTML personnalisé avec contrôle total des polices
                         # En-tête du tableau
@@ -741,8 +749,71 @@ Plan : Hospitalisation pour bilan cardiologique complet, incluant une coronarogr
                         if use_flash_model:
                             # Mode développement : méthode rapide 1-étape avec Flash
                             result = extractor.extract_snomed_info(medical_note)
+                        elif fusion_v2_mode:
+                            # Mode ULTIME V2 : extraction parallèle + validation SNOMED + validation sémantique
+                            import asyncio
+                            # Définir use_context_modifiers pour la méthode V2
+                            use_context_modifiers = True
+                            result_v2 = asyncio.run(extractor.extract_triple_with_validation_fusion_v2(
+                                text=note_content, 
+                                use_context_modifiers=use_context_modifiers
+                            ))
+                            
+                            if "error" in result_v2:
+                                st.error(f"❌ {result_v2['error']}")
+                                return
+                            
+                            # Convertir le format V2 vers le format SNOMEDExtraction attendu
+                            from models import SNOMEDExtraction, ClinicalFinding, Procedure, BodyStructure
+                            
+                            findings = []
+                            procedures = []
+                            body_structures = []
+                            
+                            for entity in result_v2['entities']['findings']:
+                                findings.append(ClinicalFinding(
+                                    term=entity['term'],
+                                    description=f"Constatation clinique : {entity['term']}",
+                                    context="Extrait par méthode ULTIME V2",
+                                    snomed_code=entity['snomed_code'],
+                                    negation=entity.get('negation', 'positive'),
+                                    family=entity.get('family', 'patient'),
+                                    suspicion=entity.get('suspicion', 'confirmed'),
+                                    antecedent=entity.get('antecedent', 'current')
+                                ))
+                            
+                            for entity in result_v2['entities']['procedures']:
+                                procedures.append(Procedure(
+                                    term=entity['term'],
+                                    description=f"Procédure médicale : {entity['term']}",
+                                    context="Extrait par méthode ULTIME V2",
+                                    snomed_code=entity['snomed_code'],
+                                    negation=entity.get('negation', 'positive'),
+                                    family=entity.get('family', 'patient'),
+                                    suspicion=entity.get('suspicion', 'confirmed'),
+                                    antecedent=entity.get('antecedent', 'current')
+                                ))
+                            
+                            for entity in result_v2['entities']['body_structures']:
+                                body_structures.append(BodyStructure(
+                                    term=entity['term'],
+                                    description=f"Structure corporelle : {entity['term']}",
+                                    context="Extrait par méthode ULTIME V2",
+                                    snomed_code=entity['snomed_code'],
+                                    negation=entity.get('negation', 'positive'),
+                                    family=entity.get('family', 'patient'),
+                                    suspicion=entity.get('suspicion', 'confirmed'),
+                                    antecedent=entity.get('antecedent', 'current')
+                                ))
+                            
+                            result = SNOMEDExtraction(
+                                original_note=medical_note,
+                                clinical_findings=findings,
+                                procedures=procedures,
+                                body_structures=body_structures
+                            )
                         elif fusion_mode:
-                            # Mode ULTIME : fusion de 3 extractions + validation
+                            # Mode ULTIME V1 : fusion de 3 extractions + validation SNOMED
                             result = extractor.extract_triple_with_validation_fusion(medical_note)
                         else:
                             # Mode production standard : méthode 3 appels parallèles classique
@@ -832,10 +903,10 @@ Plan : Hospitalisation pour bilan cardiologique complet, incluant une coronarogr
                                             text-align: center; 
                                             box-shadow: 0 6px 20px rgba(76, 175, 80, 0.3);
                                             border: 2px solid #4CAF50;">
-                                    <h3 style="margin: 0; font-size: 2rem; font-weight: 600;">
-                                        🎯 {len(valid_results_with_modifiers)} terme(s) extraits et validés dans la base SNOMED CT française
-                                    </h3>
-                                </div>
+                                        <h3 style="margin: 0; font-size: 2rem; font-weight: 600;">
+                                            🎯 {len(valid_results_with_modifiers)} terme(s) extraits et validés dans la base SNOMED CT française
+                                        </h3>
+                                    </div>
                                 """, unsafe_allow_html=True)
                                 
                                 # Créer un tableau HTML personnalisé avec contrôle total des polices
