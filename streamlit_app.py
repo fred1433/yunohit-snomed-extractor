@@ -544,25 +544,26 @@ def main():
             
             # Exemples de notes médicales prédéfinies
             exemples_notes = {
-                "Exemple 1 - Pédiatrie": """Enfant Léo Martin, 8 ans. Consulte pour une éruption cutanée prurigineuse évoluant depuis 48h sur les bras et la peau.
-Pas d'antécédents notables. Vaccins à jour. Notion de cas similaire à l'école.
-Examen : Fièvre légère à 38°C.
-Diagnostic : Varicelle.
-Traitement : Antihistaminique et repos recommandé.""",
-
-                "Exemple 2 - Médecine du sport": """Mme. Leclerc, 35 ans, vient pour une consultation médicale sportive.
-Se plaint de lombalgies occasionnelles et de fatigue après un effort prolongé. Négation de traumatisme récent.
-Antécédents familiaux : RAS. Vaccination antitétanique à jour.
-Examen clinique : tension artérielle normale. Auscultation pulmonaire normale.
-Palpation de la région lombaire : sans particularité.
-Apte à la pratique sportive.""",
-
-                "Exemple 3 - Cardiologie": """Patient : M. Dupont, 65 ans.
+                "Exemple 1 - Cardiologie": """Patient : M. Dupont, 65 ans.
 Motif de consultation : Douleur thoracique persistante à l'effort depuis 1 semaine, accompagnée d'une dyspnée.
 Antécédents : HTA connue, diabète de type 2 traité par metformine. Tabagisme sevré il y a 5 ans. Un frère décédé d'un infarctus du myocarde à 50 ans.
 Examen : Auscultation pulmonaire normale. Pas de fièvre. ECG : signes d'ischémie myocardique.
 Conclusion : Suspicion d'angor instable.
 Plan : Hospitalisation pour bilan cardiologique complet, incluant une coronarographie. Prescription de trinitrine sublinguale si douleur.""",
+
+                "Exemple 2 - Infection respiratoire": """Mme. Durand, 42 ans, consulte pour une toux grasse depuis 5 jours associée à de la fièvre et des douleurs thoraciques.
+Antécédents : Asthme léger traité par bronchodilatateur. Pas d'allergie connue.
+Examen clinique : Température 38,5°C. Auscultation pulmonaire : râles crépitants en base droite. Gorge érythémateuse.
+Palpation ganglionnaire cervicale : adénopathies présentes.
+Diagnostic : Bronchopneumonie.
+Traitement : Antibiotique amoxicilline, antitussif et paracétamol. Arrêt de travail 7 jours.""",
+
+                "Exemple 3 - Rhumatologie": """M. Bernard, 58 ans, se présente pour des douleurs articulaires des mains et du genou droit évoluant depuis 3 semaines.
+Antécédents familiaux : Mère décédée de polyarthrite rhumatoïde. Pas de traumatisme récent.
+Examen clinique : Tuméfaction du genou droit avec épanchement. Douleurs des articulations métacarpophalangiennes bilatérales. Pas de fièvre.
+Examens complémentaires : Ponction du genou droit pour analyse du liquide synovial.
+Diagnostic différentiel : Arthrite inflammatoire vs dégénérative.
+Traitement symptomatique en attente des résultats.""",
 
                 "Saisie personnalisée": ""
             }

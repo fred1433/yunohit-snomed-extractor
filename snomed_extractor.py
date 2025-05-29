@@ -32,7 +32,7 @@ class SNOMEDExtractor:
 
 {medical_note}
 
-Extrais UNIQUEMENT les termes appartenant aux 3 hiérarchies SNOMED CT ciblées :
+Extrais UNIQUEMENT les concepts médicaux appartenant aux 3 hiérarchies SNOMED CT ciblées :
 
 1. **CLINICAL FINDING** (Constatations cliniques) :
    - Symptômes observés (ex: éruption cutanée, prurit)
@@ -55,11 +55,11 @@ Extrais UNIQUEMENT les termes appartenant aux 3 hiérarchies SNOMED CT ciblées 
 
 Format JSON requis :
 {{
-  "termes_medicaux": [
+  "concepts_medicaux": [
     {{
-      "terme": "terme médical exact",
+      "concept": "concept médical normalisé",
       "categorie": "clinical_finding/procedure/body_structure",
-      "code_classification": "code SNOMED CT numérique unique pour ce terme",
+      "code_classification": "code SNOMED CT numérique unique pour ce concept",
       "negation": "positive/negative",
       "famille": "patient/family", 
       "suspicion": "confirmed/suspected",
@@ -68,7 +68,7 @@ Format JSON requis :
   ]
 }}
 
-IMPORTANT : Assigne un code SNOMED CT différent et approprié pour chaque terme médical.
+IMPORTANT : Assigne un code SNOMED CT différent et approprié pour chaque concept médical.
 Exemples de codes : 
 - Varicelle: 38907003
 - Éruption cutanée: 271807003  
@@ -81,7 +81,7 @@ RÈGLES pour les modifieurs :
 - suspicion : "confirmed" si certain, "suspected" si suspecté
 - antecedent : "current" si actuel, "history" si antécédent médical
 
-Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
+Retourne uniquement le JSON avec les concepts des 3 hiérarchies ciblées."""
         return prompt
     
     def extract_snomed_info(self, medical_note: MedicalNote) -> SNOMEDExtraction:
@@ -134,8 +134,8 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
             body_structures = []
             
             # Traiter les termes médicaux avec codes et modifieurs fournis par Gemini
-            for terme_data in parsed_data.get("termes_medicaux", []):
-                terme = terme_data.get("terme", "")
+            for terme_data in parsed_data.get("concepts_medicaux", []):
+                terme = terme_data.get("concept", "")
                 categorie = terme_data.get("categorie", "").lower()
                 code_snomed = terme_data.get("code_classification", "UNKNOWN")
                 
@@ -208,11 +208,11 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
                 return json.loads(json_str)
             else:
                 print("❌ Aucun JSON trouvé dans la réponse")
-                return {"termes_medicaux": []}
+                return {"concepts_medicaux": []}
         except json.JSONDecodeError as e:
             print(f"❌ Erreur parsing JSON : {e}")
             print(f"Réponse reçue : {response_text[:500]}...")
-            return {"termes_medicaux": []}
+            return {"concepts_medicaux": []}
     
     def _extract_response_text(self, response) -> str:
         """Extraire le texte d'une réponse Gemini"""
@@ -274,7 +274,7 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
                 response_text = self._extract_response_text(response)
                 if response_text:
                     parsed_data = self.parse_gemini_response(response_text)
-                    terms = parsed_data.get("termes_medicaux", [])
+                    terms = parsed_data.get("concepts_medicaux", [])
                     print(f"   → {len(terms)} termes extraits")
                     all_terms.extend(terms)
                 else:
@@ -286,7 +286,7 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
             seen_terms = set()
             unique_terms = []
             for term_data in all_terms:
-                terme = term_data.get("terme", "").lower().strip()
+                terme = term_data.get("concept", "").lower().strip()
                 if terme and terme not in seen_terms:
                     seen_terms.add(terme)
                     unique_terms.append(term_data)
@@ -299,7 +299,7 @@ Retourne uniquement le JSON avec les termes des 3 hiérarchies ciblées."""
             body_structures = []
             
             for terme_data in unique_terms:
-                terme = terme_data.get("terme", "")
+                terme = terme_data.get("concept", "")
                 categorie = terme_data.get("categorie", "").lower()
                 code_snomed = terme_data.get("code_classification", "UNKNOWN")
                 
